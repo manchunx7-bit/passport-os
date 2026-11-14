@@ -1,5 +1,6 @@
 #include "apps/xiaozhi/xiaozhi_audio.h"
 #include "apps/xiaozhi/opus_decoder_storage.h"
+#include "apps/xiaozhi/xiaozhi_level.h"
 #include "bsp_audio.h"
 #include "audio_workspace.h"
 #include "encoder/impl/esp_opus_enc.h"
@@ -17,6 +18,14 @@ namespace xiaozhi {
 
 namespace {
 std::atomic<bool> s_cancel_requested{false};
+// One atomic snapshot: low byte = level, upper 24 bits = FreeRTOS tick timestamp.
+// Wrap-safe expiry also handles starvation and blocked I2S without UI callbacks.
+std::atomic<uint32_t> s_visual_level{0};
+uint32_t visual_time() { return xTaskGetTickCount() & 0xFFFFFFu; }
+void publish_level(const uint8_t *pcm, size_t bytes, unsigned gain = 100) {
+    const uint8_t level = face::pcm_level(reinterpret_cast<const int16_t *>(pcm), bytes / 2, gain);
+    s_visual_level.store((visual_time() << 8) | level, std::memory_order_relaxed);
+}
 constexpr int kEncodeRate = 16000;      // 编码固定 16kHz（与官方固件一致）
 constexpr int kChannels = 1;
 constexpr int kBitsPerSample = 16;
@@ -166,6 +175,13 @@ AudioService &AudioService::GetInstance() {
 
 void AudioService::RequestStop() {
     s_cancel_requested.store(true);
+    s_visual_level.store(0, std::memory_order_relaxed);
+}
+
+uint8_t AudioService::VisualLevel() {
+    if (s_cancel_requested.load()) return 0;
+    const uint32_t snapshot = s_visual_level.load(std::memory_order_relaxed);
+    return ((visual_time() - (snapshot >> 8)) & 0xFFFFFFu) <= pdMS_TO_TICKS(180) ? snapshot & 0xFFu : 0;
 }
 
 AudioService::AudioService() {
@@ -487,6 +503,7 @@ bool AudioService::StartRecording() {
 
     while (xSemaphoreTake(work_idle_, 0) == pdTRUE) { }
     is_recording_ = true;
+    s_visual_level.store(0, std::memory_order_relaxed);
     work_ = Work::Record;
     xSemaphoreGive(work_signal_);
 
@@ -507,6 +524,7 @@ void AudioService::StopRecording() {
     }
 
     is_recording_ = false;                 // 录音循环的唯一退出条件
+    s_visual_level.store(0, std::memory_order_relaxed);
     const bool idle = (work_ != Work::Record) || WaitWorkIdle(kWorkIdleTimeoutMs, "StopRecording");
 
     // Keep the encoder for another recording turn. Playback can close its small
@@ -529,10 +547,12 @@ void AudioService::RecordSection() {
         // bsp_audio_read 是 portMAX_DELAY 阻塞读（见 bsp_audio.h）；正常 60ms 一块
         // 必然返回，因此 is_recording_ 的检查点足够密集。
         if (bsp_audio_read(pcm_scratch_, kEncPcmFrameBytes) != ESP_OK) {
+            s_visual_level.store(0, std::memory_order_relaxed);
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
         if (!is_recording_ || opus_enc_handle_ == nullptr) break;
+        publish_level(pcm_scratch_, kEncPcmFrameBytes);
 
         esp_audio_enc_in_frame_t in_f = {};
         in_f.buffer = pcm_scratch_;
@@ -674,6 +694,7 @@ bool AudioService::StartPlayback() {
     play_stop_ = false;
     play_drain_ = false;
     is_playing_ = true;
+    s_visual_level.store(0, std::memory_order_relaxed);
     xSemaphoreGive(work_signal_);
 
     ESP_LOGI(TAG, "Playback started: Opus %dHz (native). free=%u", playback_rate_,
@@ -729,6 +750,7 @@ void AudioService::StopPlayback() {
 }
 
 void AudioService::AbortPlayback() {
+    s_visual_level.store(0, std::memory_order_relaxed);
     if (lifecycle_lock_ == nullptr) return;
     xSemaphoreTakeRecursive(lifecycle_lock_, portMAX_DELAY);
     if (work_ != Work::Play) {
@@ -799,10 +821,13 @@ void AudioService::PlaySection() {
                 format_logged = true;
             }
             if (bsp_audio_write(pcm_scratch_, bytes) != ESP_OK) {
+                s_visual_level.store(0, std::memory_order_relaxed);
                 ESP_LOGE(TAG, "I2S playback write failed (%u bytes)", (unsigned)bytes);
                 break;
             }
             playback_progress_.fetch_add(1);
+            if (!play_stop_ && !s_cancel_requested.load())
+                publish_level(pcm_scratch_, bytes, bsp_audio_get_master_volume());
         } else if (frames < 0) {
             ESP_LOGW(TAG, "Opus decode failed: %d (%u-byte frame)", frames, (unsigned)got);
         }
@@ -854,6 +879,7 @@ void AudioService::WorkerLoop() {
             PlaySection();
         }
         // 无论哪种模式结束，都回报"已停"，让控制任务安全地关闭句柄
+        s_visual_level.store(0, std::memory_order_relaxed);
         is_recording_ = false;
         is_playing_ = false;
         work_ = Work::Idle;

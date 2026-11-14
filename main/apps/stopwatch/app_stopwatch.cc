@@ -47,7 +47,7 @@ void refresh() {
     stopwatch_format(elapsed, time, sizeof(time));
     // Hours get a smaller, bounded font so the value never runs over the edges.
     const lv_font_t *font = elapsed < 360000000000ULL
-                               ? &lv_font_montserrat_32 : &lv_font_montserrat_20;
+                               ? &ui_digits_32 : &lv_font_montserrat_20;
     if (font != s_time_font) {
         lv_obj_set_style_text_font(s_time, font, 0);
         s_time_font = font;
@@ -60,7 +60,7 @@ void refresh() {
     int left = (240 - extent.x - 45) / 2;
     lv_obj_set_x(s_time, left); lv_obj_set_width(s_time, extent.x + 1);
     lv_obj_set_pos(s_fraction, left + extent.x + 3, 113);
-    lv_obj_set_y(s_time, font == &lv_font_montserrat_32 ? 98 : 111);
+    lv_obj_set_y(s_time, font == &ui_digits_32 ? 98 : 111);
     set_text(s_time, time); set_text(s_fraction, hundredths);
     set_text(s_status, s_watch.running ? "正在计时" : (elapsed ? "已暂停" : "准备计时"));
     set_text(s_primary, s_watch.running ? "确定暂停 · 上键记段" : (elapsed ? "确定继续 · 下键清零" : "确定开始计时"));
@@ -107,13 +107,13 @@ void start() {
     s_screen = lv_obj_create(nullptr);
     ui_pixel_background(s_screen);
     lv_obj_t *top = ui_pixel_top_bar(s_screen);
-    ui_pixel_wifi_bars_create(top, 12, 18, s_wifi_bars);
+    ui_pixel_wifi_bars_create(top, UI_STATUS_WIFI_X, 18, s_wifi_bars);
     lv_obj_t *name = ui_pixel_label(top, "秒表", &buddy_font_16, UI_TEXT);
     lv_obj_align(name, LV_ALIGN_LEFT_MID, 42, 0);
-    s_battery = ui_pixel_battery_create(top, 206, 6, UI_TEXT, &lv_font_montserrat_14);
+    s_battery = ui_pixel_battery_create(top, UI_STATUS_BATTERY_X, 6, UI_TEXT, &lv_font_montserrat_14);
     s_status = label("", &buddy_font_16, UI_ACCENT, 12, 50, 216, 24);
     lv_obj_set_style_text_align(s_status, LV_TEXT_ALIGN_CENTER, 0);
-    s_time = label("", &lv_font_montserrat_32,
+    s_time = label("", &ui_digits_32,
         ui_theme_is_multicolor() ? UI_SECONDARY : UI_TEXT, 12, 98, 164, 46);
     s_fraction = label("", &lv_font_montserrat_20, UI_TEXT_DIM, 172, 113, 52, 28);
     s_empty = label("", &buddy_font_16, UI_TEXT_DIM, 12, 188, 216, 24);
@@ -122,7 +122,7 @@ void start() {
     for (int i = 0; i < STOPWATCH_LAPS; ++i)
         s_laps[i] = label("", &lv_font_montserrat_14, UI_TEXT, 12, 186 + 24 * i, 216, 20);
     s_primary = ui_pixel_footer(s_screen, "", "长按确定返回", &buddy_font_16);
-    s_time_font = &lv_font_montserrat_32;
+    s_time_font = &ui_digits_32;
     s_battery_updated_us = 0;
     refresh();
     lv_screen_load(s_screen);

@@ -14,8 +14,14 @@ prelude = r'''
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
+#include <string>
 #include "bsp_audio_workspace.h"
+#include "voice_intent.h"
 #include "apps/radio/radio_player.h"
+#undef ESP_LOGI
+#undef ESP_LOGW
+#undef ESP_LOGE
 #define ESP_LOGI(...) ((void)0)
 #define ESP_LOGW(...) ((void)0)
 #define ESP_LOGE(...) ((void)0)
@@ -69,7 +75,13 @@ static void *catalog_calloc(size_t n,size_t s){allocations++;assert(idle);return
 void radio_player_set_playing(bool value){playing=value;}
 bool radio_player_wait_idle(uint32_t){if(cancel_during_wait)s_catalog_cancel=true;return idle;}
 static void home_profile_get(home_profile_t*p){*p={};}
-static size_t radio_catalog_discover_location(RadioLocation,RadioStation*,size_t,RadioLocation*,bool(*)()){queries++;return 1;}
+static std::atomic<voice_intent::Request *> s_voice{nullptr};
+static RadioLocation asked;
+static std::string voice_filter;
+static int chosen=-1;
+static size_t radio_catalog_discover_location(RadioLocation preferred,RadioStation*out,size_t,RadioLocation*,bool(*)(),const char*filter){
+ queries++;asked=preferred;voice_filter=filter?filter:"<browse>";out[0]={"北京新闻广播","","",0};out[1]={"北京交通广播","","",0};return 2;}
+void radio_player_set_station(size_t index){chosen=static_cast<int>(index);}
 static void radio_ui_set_location(const char*){}
 bool radio_player_replace_stations_resuming(const RadioStation*,size_t){installs++;return true;}
 '''
@@ -98,14 +110,22 @@ int main(){
  s_catalog_cancel=false;cancel_during_wait=false;s_catalog_running=true;fail_catalog_alloc=true;
  catalog_worker(nullptr);assert(!queries && playing && !s_catalog_running && !s_catalog_installed);
  fail_catalog_alloc=false;s_catalog_running=true;catalog_worker(nullptr);
- assert(queries==1 && installs==1 && playing && !s_catalog_running && s_catalog_installed);
- puts("Radio shared stations: ownership, init failure, stop timeout, reuse; catalog timeout/cancel/OOM admission, once per session: PASS");
+ assert(queries==1 && installs==1 && playing && !s_catalog_running && s_catalog_installed && chosen==-1);
+ // A voice request replaces the profile city once and picks the named station.
+ auto *voice=new voice_intent::Request{};std::strcpy(voice->name,"北京");std::strcpy(voice->detail,"交通");
+ s_voice=voice;s_catalog_running=true;catalog_worker(nullptr);
+ assert(!strcmp(asked.city,"北京") && !strcmp(asked.country_code,"CN") && chosen==1 && !s_voice && voice_filter=="交通");
+ voice=new voice_intent::Request{};std::strcpy(voice->name,"广东");s_voice=voice;s_catalog_running=true;
+ catalog_worker(nullptr);assert(!strcmp(asked.city,"广东") && chosen==0 && !s_voice);
+ chosen=-1;s_catalog_running=true;catalog_worker(nullptr);assert(!asked.city[0] && chosen==-1);
+ puts("Radio shared stations: ownership, init failure, stop timeout, reuse; catalog timeout/cancel/OOM admission, once per session, voice city/station: PASS");
 }
 '''
 with tempfile.TemporaryDirectory() as tmp:
     path = Path(tmp) / 'radio.cpp'
     path.write_text(prelude + player + catalog.replace('std::calloc(', 'catalog_calloc(') + checks)
     subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
+                    '-I', str(ROOT / 'tests/registry_mocks'),
                     '-I', str(ROOT / 'components/bsp/include'), '-I', str(ROOT / 'main'),
                     str(path), '-o', str(path.with_suffix(''))], check=True)
     subprocess.run([str(path.with_suffix(''))], check=True)

@@ -17,6 +17,7 @@ void ui_show();
 void ui_hide();
 
 void ui_set_state(State state);                       // 顶部状态胶囊
+void ui_set_emotion(const char *emotion);              // 服务端 llm.emotion → 表情
 void ui_set_status_text(const std::string &text);      // 自定义状态文案（激活码/错误）
 void ui_set_user_text(const std::string &text);        // 用户说的话（替换）
 void ui_set_ai_text(const std::string &text);          // 小智回复（替换）

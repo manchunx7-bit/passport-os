@@ -4,28 +4,57 @@
 
 **A small device worth keeping in your daily routine.**
 
-Community firmware for the FoloToy AI Passport, based on ESP32-C3 with 8 MB Flash. It brings ten apps together with shared settings, Wi-Fi setup, themes, audio, battery reporting, and power management.
+Community firmware for the FoloToy AI Passport, based on ESP32-C3 with 8 MB Flash. It brings thirteen apps together with shared settings, Wi-Fi setup, themes, audio, battery reporting, and power management.
+
+**Ask Xiaozhi to adjust the volume, play music or radio, and set reminders on the device.**
 
 ## Why this project exists
 
-Thank you to everyone who has enjoyed the project and shared feedback. I started Passport OS to make a small device I would use regularly, then selected ten functions and apps through repeated experiments.
+Thank you to everyone who has enjoyed the project and shared feedback. I started Passport OS to make a small device I would use regularly, then selected thirteen functions and apps through repeated experiments.
+
+One part I especially enjoy is letting Xiaozhi connect these functions. While chatting, you can ask to hear music, save a task, or start a focus session, and Xiaozhi calls the device's functions to carry out the request.
 
 People have suggested many personal improvements. Because everyone uses the hardware differently, sharing the source lets you add what you need, remove what you do not, and make a version that fits you. Have fun using and modifying it.
 
-## Ten apps
+## Ask Xiaozhi to operate the device
+
+**Xiaozhi is the device's voice control entry point.** Double-press the OK button to enter a conversation, then use everyday language to adjust settings, open apps, play media, or manage tasks.
+
+| Example request | Device action |
+| --- | --- |
+| “Turn the volume down” or “Set screen brightness to 50%” | Adjust and save the device's volume or brightness |
+| “Play my liked songs and stop in half an hour” | Open NetEase Music, play your favorites, and set a stop timer |
+| “Play traffic radio from Shenzhen” | Find a station by city and keywords, then open Radio to play it |
+| “Start a Pomodoro” or “How much time is left?” | Start a 25-minute focus session or read the actual remaining time; pause and resume are also supported |
+| “Remind me to drink water in ten minutes” or “Remind me to read every day at 9 pm” | Save a one-time or recurring reminder with an on-device alert and chime |
+| “Create a packing list: keys, phone, umbrella” or “Mark umbrella as done” | Save a checklist, then read and update its items and completion state |
+| “Open Stopwatch” or “Go to Home” | Open the requested app or screen |
+
+You can also ask for today's AI news. Robot expressions and an audio waveform follow listening and speech, longer text expands into a reading area, and all four themes are supported.
+
+Voice tools require a network connection and Xiaozhi configuration. NetEase playback also depends on your account and available tracks; radio depends on the online directory. Opening another app or starting media playback ends the current Xiaozhi conversation. Double-press OK again for further voice control. The device must remain powered on for reminders to trigger.
+
+## Thirteen apps
 
 | App | What it does | Requirements |
 | --- | --- | --- |
 | Home | Clock, profile, portraits, cards, weather, and air quality | Network for weather and air quality |
 | Radio | City and station selection, playback, and sleep timer | Wi-Fi and available online stations |
 | AI Voice | Hardware microphone and configurable desktop hotkeys | Windows companion program |
-| Xiaozhi AI | Spoken conversations through the microphone and speaker | Network and Xiaozhi service configuration |
+| Xiaozhi AI | Voice conversations, volume and brightness control, app opening, music and radio requests, timers, reminders, and lists | Network and Xiaozhi configuration; media needs its corresponding service |
+| NetEase Music | Search songs, play playlists and daily recommendations | Wi-Fi, your own NetEase account, and available APIs |
+| Reminders | One-time and recurring reminders, chimes, and snooze | Works offline; uses the device clock |
+| Lists | View, check off, and manage tasks | Works offline |
 | Muse | Send voice messages and read replies on screen | Phone pairing, your own account, and a working network |
 | Why Barking | A sound-controlled game | Works offline |
 | Sound Jump | Longer sounds jump farther; release your voice to jump | Works offline |
 | Tetris | Stack blocks and clear lines | Works offline |
 | Stopwatch | Timing, splits, pause, and resume | Works offline |
 | Pomodoro | Focus sessions, breaks, and completion chimes | Works offline |
+
+## Latest firmware
+
+[Get the latest firmware](https://ai-passport.folotoy.cn/plays/438/?v=5579-4)
 
 ## Related projects
 
@@ -34,7 +63,7 @@ People have suggested many personal improvements. Because everyone uses the hard
 
 ## Install
 
-Using a prebuilt image does not require AI tools or a firmware development environment. When a matching release is available, download it from [GitHub Releases](https://github.com/manchunx7-bit/passport-os/releases).
+Using a prebuilt image does not require AI tools or a firmware development environment. Get it from the [latest firmware page](https://ai-passport.folotoy.cn/plays/438/?v=5579-4).
 
 Use only the matching FoloToy AI Passport hardware revision with ESP32-C3 and 8 MB Flash. Similar-looking boards may have incompatible displays, audio chips, buttons, or partition layouts.
 
@@ -55,6 +84,7 @@ Download the source, modify the apps or interface, build a firmware image, and t
 | --- | --- |
 | Application UI and logic | [`main/apps/`](../main/apps/) |
 | Launcher, settings, and app lifecycle | [`main/launcher/`](../main/launcher/) |
+| Xiaozhi device control and media handover | [`main/device_control_mcp.cc`](../main/device_control_mcp.cc), [`main/voice_intent.cc`](../main/voice_intent.cc) |
 | Shared UI and fonts | [`main/ui/`](../main/ui/), [`main/fonts/`](../main/fonts/) |
 | Board drivers | [`components/bsp/`](../components/bsp/) |
 | Wi-Fi setup | [`components/esp-wifi-connect/`](../components/esp-wifi-connect/) |
@@ -87,8 +117,8 @@ ESP-IDF Component Manager downloads the declared dependencies. The build verifie
 With ESP-IDF 5.5.3 activated:
 
 ```bash
-./tools/validate.sh --static
-./tools/validate.sh --firmware
+bash tools/validate.sh --static
+bash tools/validate.sh --firmware
 ```
 
 The firmware validation command builds and verifies a full image at `build/FoloToy-AI-Passport-full.bin`. Build success does not replace physical testing of buttons, display, audio, networking, and the behavior you changed.

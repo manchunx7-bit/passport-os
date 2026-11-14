@@ -24,9 +24,9 @@ esp_err_t app_ui_init(void) {
     if(s_screen)return ESP_OK;
     s_screen=lv_obj_create(NULL);ui_pixel_background(s_screen);
     lv_obj_t *top=ui_pixel_top_bar(s_screen);
-    ui_pixel_wifi_bars_create(top, 12, 18, s_wifi_bars);
+    ui_pixel_wifi_bars_create(top, UI_STATUS_WIFI_X, 18, s_wifi_bars);
     lv_obj_t *name=ui_pixel_label(top,"随身语音",&buddy_font_16,UI_TEXT);lv_obj_align(name,LV_ALIGN_LEFT_MID,42,0);
-    s_battery=ui_pixel_battery_create(top,206,6,UI_TEXT,&lv_font_montserrat_14);
+    s_battery=ui_pixel_battery_create(top,UI_STATUS_BATTERY_X,6,UI_TEXT,&lv_font_montserrat_14);
     text("AI语音输入",&ui_font_20,UI_TEXT,12,48,216,28);
     s_mic=lv_obj_create(s_screen);lv_obj_remove_style_all(s_mic);lv_obj_remove_flag(s_mic,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_pos(s_mic,88,100);lv_obj_set_size(s_mic,64,64);
@@ -35,7 +35,7 @@ esp_err_t app_ui_init(void) {
     block(s_mic,14,21,3,20,UI_TEXT_DIM);block(s_mic,47,21,3,20,UI_TEXT_DIM);
     block(s_mic,14,39,36,3,UI_TEXT_DIM);block(s_mic,30,42,4,12,UI_TEXT_DIM);block(s_mic,22,54,20,3,UI_TEXT_DIM);
     for(int i=0;i<7;i++)s_bars[i]=block(s_screen,61+i*18,153,10,2,UI_ACCENT);
-    s_elapsed=text("00:00",&lv_font_montserrat_32,UI_TEXT,12,157,216,38);
+    s_elapsed=text("00:00",&ui_digits_32,UI_TEXT,12,157,216,38);
     s_state=text("等待电脑连接",&ui_font_20,UI_WARNING,12,188,216,28);
     s_help=text("启动电脑端转发器",&buddy_font_16,UI_TEXT_DIM,12,220,216,22);
     s_channel=text("电脑输入选择\nCABLE Output\n转发器输出选择\nCABLE Input",&buddy_font_16,UI_TEXT_DIM,12,137,216,112);

@@ -17,7 +17,6 @@ build-diag/
 build-*/
 output/
 release/
-sdkconfig.diag
 all_chars.txt
 ui_chars.txt
 .impeccable/
@@ -25,3 +24,6 @@ ui_chars.txt
 # Generated firmware and local validation artifacts
 *.uf2
 *.hex
+
+# Frozen local binary; inspect only when needed
+firmware/

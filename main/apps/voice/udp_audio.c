@@ -13,6 +13,7 @@
 #include "lwip/sockets.h"
 
 #include <errno.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -43,10 +44,8 @@ static volatile bool s_peer_known = false;
 static volatile int64_t s_peer_last_us = 0;
 static portMUX_TYPE s_peer_mux = portMUX_INITIALIZER_UNLOCKED;
 
-// 上行缓冲(tx_send 内持有 s_tx_mux 时使用)
-static uint8_t s_tx_buf[TX_BUF_MAX];
-// 音频组装缓冲:唯一写者是音频发送 worker,故无需加锁
-static uint8_t s_audio_pkt[2 + ADPCM_BLOCK_MAX];
+// 上行缓冲:init 时分配、deinit 时释放,仅在持有 s_tx_mux 时访问
+static uint8_t *s_tx_buf = NULL;
 static uint8_t s_audio_seq = 0;
 
 static portMUX_TYPE s_stat_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -97,9 +96,11 @@ static bool peer_fresh(void)
 
 // 单播一发。对端未知 / socket 未就绪 / 发送失败返回 -1。
 // s_tx_buf 为共享缓冲,由 s_tx_mux 串行化(audio worker 与 app task 是两个任务)。
-static int tx_send(uint8_t type, const void *payload, size_t len)
+// head 为可选的 payload 前缀(音频帧头),直接组装进 s_tx_buf,省去额外缓冲。
+static int tx_send_parts(uint8_t type, const uint8_t *head, size_t head_len,
+                         const void *payload, size_t len)
 {
-    if (s_sock < 0 || len + 1 > TX_BUF_MAX || s_tx_mux == NULL) {
+    if (s_sock < 0 || head_len + len + 1 > TX_BUF_MAX || s_tx_mux == NULL) {
         return -1;
     }
     if (xSemaphoreTake(s_tx_mux, pdMS_TO_TICKS(50)) != pdTRUE) {
@@ -108,9 +109,11 @@ static int tx_send(uint8_t type, const void *payload, size_t len)
     }
     int rc = -1;
     struct sockaddr_in peer;
-    if (peer_snapshot(&peer)) {
+    if (s_tx_buf != NULL && peer_snapshot(&peer)) {
         s_tx_buf[0] = type;
-        if (len > 0) memcpy(s_tx_buf + 1, payload, len);
+        if (head_len > 0) memcpy(s_tx_buf + 1, head, head_len);
+        if (len > 0) memcpy(s_tx_buf + 1 + head_len, payload, len);
+        len += head_len;
         ssize_t n = sendto(s_sock, s_tx_buf, len + 1, 0,
                            (const struct sockaddr *)&peer, sizeof(peer));
         if (n == (ssize_t)(len + 1)) {
@@ -121,6 +124,11 @@ static int tx_send(uint8_t type, const void *payload, size_t len)
     }
     xSemaphoreGive(s_tx_mux);
     return rc;
+}
+
+static int tx_send(uint8_t type, const void *payload, size_t len)
+{
+    return tx_send_parts(type, NULL, 0, payload, len);
 }
 
 static void send_device_hello(void)
@@ -177,16 +185,16 @@ static void peer_refresh(const struct sockaddr_in *src)
 
 static void rx_task(void *arg)
 {
-    (void)arg;
-    static uint8_t rx[RX_BUF_MAX];
-    static char json[APP_PROTO_RX_CAP + 1];
+    // 接收缓冲由 init 分配、本任务退出时释放(deinit 超时后任务仍可能在用)。
+    // 多 1B 用于原地补 '\0',事件 JSON 直接在 rx 内解析。
+    uint8_t *rx = arg;
     int64_t last_ping_us = 0;
     ESP_LOGI(TAG, "UDP RX task started (port %d)", VOICE_UDP_PORT);
 
     while (s_active) {
         struct sockaddr_in src;
         socklen_t slen = sizeof(src);
-        ssize_t n = recvfrom(s_sock, rx, sizeof(rx), 0,
+        ssize_t n = recvfrom(s_sock, rx, RX_BUF_MAX, 0,
                              (struct sockaddr *)&src, &slen);
         // n <= 0 是 SO_RCVTIMEO(200ms)到期,正常路径 → 直接落到下面的判活节拍
         if (n > 0) {
@@ -203,9 +211,8 @@ static void rx_task(void *arg)
                 if (!peer_snapshot(&peer) || peer.sin_addr.s_addr != src.sin_addr.s_addr ||
                     src.sin_port != peer.sin_port) continue;
                 peer_refresh(&src);
-                size_t plen = (size_t)n - 1;
-                if (plen > APP_PROTO_RX_CAP) plen = APP_PROTO_RX_CAP;   // 截断防御
-                memcpy(json, rx + 1, plen);
+                size_t plen = (size_t)n - 1;   // <= RX_BUF_MAX - 1 < APP_PROTO_RX_CAP
+                char *json = (char *)rx + 1;
                 json[plen] = '\0';
                 app_event_t ev;
                 if (app_protocol_parse(json, plen, &ev)) {
@@ -243,6 +250,7 @@ static void rx_task(void *arg)
         }
     }
     ESP_LOGI(TAG, "UDP RX task exiting");
+    free(rx);
     s_rx_task = NULL;
     vTaskDelete(NULL);
 }
@@ -261,9 +269,26 @@ int udp_audio_init(void)
         }
     }
 
+    if (s_tx_buf == NULL) {
+        uint8_t *tx = malloc(TX_BUF_MAX);
+        if (tx == NULL) {
+            ESP_LOGE(TAG, "TX 缓冲分配失败");
+            return -1;
+        }
+        xSemaphoreTake(s_tx_mux, portMAX_DELAY);
+        s_tx_buf = tx;
+        xSemaphoreGive(s_tx_mux);
+    }
+    uint8_t *rx = malloc(RX_BUF_MAX + 1);
+    if (rx == NULL) {
+        ESP_LOGE(TAG, "RX 缓冲分配失败");
+        return -1;
+    }
+
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) {
         ESP_LOGE(TAG, "socket 创建失败: errno=%d", errno);
+        free(rx);
         return -1;
     }
     struct sockaddr_in addr;
@@ -274,6 +299,7 @@ int udp_audio_init(void)
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         ESP_LOGE(TAG, "bind %d 失败: errno=%d", VOICE_UDP_PORT, errno);
         close(sock);
+        free(rx);
         return -1;
     }
     // 接收超时:让 RX 任务能周期性复查停止位(deinit 才能干净退出)
@@ -287,9 +313,10 @@ int udp_audio_init(void)
 
     s_sock = sock;
     s_active = true;
-    if (xTaskCreate(rx_task, "udp_rx", 4096, NULL, 4, &s_rx_task) != pdPASS) {
+    if (xTaskCreate(rx_task, "udp_rx", 4096, rx, 4, &s_rx_task) != pdPASS) {
         ESP_LOGE(TAG, "RX 任务创建失败");
         s_active = false;
+        free(rx);
         close(sock);
         s_sock = -1;
         return -1;
@@ -300,7 +327,7 @@ int udp_audio_init(void)
 
 int udp_audio_deinit(void)
 {
-    if (s_sock < 0 && s_rx_task == NULL) return 0;   // 幂等
+    if (s_sock < 0 && s_rx_task == NULL && s_tx_buf == NULL) return 0;   // 幂等
 
     // 1. 先置停止位:recvfrom 的 200ms 超时会让任务回到循环顶看到它
     s_active = false;
@@ -323,6 +350,13 @@ int udp_audio_deinit(void)
     memset(&s_peer, 0, sizeof(s_peer));
     portEXIT_CRITICAL(&s_peer_mux);
     s_audio_seq = 0;
+    // 5. 释放 TX 缓冲(持锁,与仍在收尾的发送者互斥);RX 缓冲由任务自行释放
+    if (s_tx_mux != NULL) {
+        xSemaphoreTake(s_tx_mux, portMAX_DELAY);
+        free(s_tx_buf);
+        s_tx_buf = NULL;
+        xSemaphoreGive(s_tx_mux);
+    }
     ESP_LOGI(TAG, "UDP 通道已关闭");
     return 0;
 }
@@ -332,10 +366,8 @@ int udp_audio_notify_audio(const uint8_t *frame, size_t len)
     if (frame == NULL || len == 0 || len > ADPCM_BLOCK_MAX) return -1;
     // UDP 下每块恒为单片且是末片 → 帧头 [seq][0x80],与 companion 的
     // reassemble_adpcm() 期望的"新 seq + is_last"完全一致。
-    s_audio_pkt[0] = s_audio_seq++;
-    s_audio_pkt[1] = 0x80;
-    memcpy(s_audio_pkt + 2, frame, len);
-    int rc = tx_send(VOICE_UDP_T_AUDIO, s_audio_pkt, len + 2);
+    const uint8_t head[2] = {s_audio_seq++, 0x80};
+    int rc = tx_send_parts(VOICE_UDP_T_AUDIO, head, sizeof(head), frame, len);
     if (rc != 0) drop_inc(&s_audio_drops);
     return rc;
 }

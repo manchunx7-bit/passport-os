@@ -23,6 +23,9 @@ typedef enum {
     APP_ID_SOUND_JUMP,
     APP_ID_MUSE,
     APP_ID_POMODORO,
+    APP_ID_NETEASE,
+    APP_ID_REMINDERS,
+    APP_ID_LISTS,
     APP_ID_COUNT
 } passport_app_id_t;
 
@@ -32,6 +35,7 @@ typedef enum {
     BTN_EVT_RELEASE,
     BTN_EVT_LONG,
     BTN_EVT_LONG_UP,
+    BTN_EVT_DOUBLE, // resolved by ADC task; reserved for global OK shortcut
 } app_btn_event_t;
 
 typedef struct {
@@ -51,8 +55,11 @@ typedef struct {
     // app. Return false while a worker still owns network/audio resources.
 #ifdef __cplusplus
     bool (*prepare_stop)(void) = nullptr;
+    // Consume long OK to navigate inside the app. False lets the registry exit.
+    bool (*on_back)(void) = nullptr;
 #else
     bool (*prepare_stop)(void);
+    bool (*on_back)(void);
 #endif
 } passport_app_t;
 

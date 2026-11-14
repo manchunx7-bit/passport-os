@@ -2,8 +2,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 tests/test_voice_memory.py
+python3 tests/test_xiaozhi_face_power.py
+python3 tests/check_digit_font.py
+python3 tests/check_title_glyphs.py
+python3 tests/check_launcher_apps.py
 test_dir="$(mktemp -d /tmp/passport-host.XXXXXX)"
 trap 'rm -rf -- "$test_dir"' EXIT
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined \
+    -Imain tests/test_xiaozhi_level.cc -o "$test_dir/xiaozhi-level"
+"$test_dir/xiaozhi-level"
 "${CXX:-c++}" -std=c++20 -Wall -Wextra -Werror -Wno-unused-variable \
     -fsanitize=address,undefined -g -Itests/registry_mocks -Imain \
     tests/test_app_registry.cc -o "$test_dir/registry"
@@ -88,6 +95,9 @@ python3 tests/test_radio_source.py
     -fsanitize=address,undefined -g -Imain tests/test_radio_stream_buffer.cc -o "$test_dir/radio-buffer"
 "$test_dir/radio-buffer"
 python3 tests/test_xiaozhi.py
+python3 tests/test_reminders.py
+python3 tests/test_device_control.py
+python3 tests/test_lists.py
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Icomponents/passport_muse/sdk -Icomponents/passport_muse/include \
     tests/test_muse_voice.c components/passport_muse/voice_helpers.c -o "$test_dir/muse-voice"
 python3 tests/test_muse_chat_link.py
@@ -128,4 +138,20 @@ python3 tests/test_public_build.py
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/battery_mocks -Icomponents/bsp/include \
     tests/test_battery_driver.c components/bsp/src/bsp_battery.c -o "$test_dir/battery"
 "$test_dir/battery"
+python3 tests/test_netease_parse.py
+python3 tests/test_media_startup.py
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined \
+    -Itests/registry_mocks -Imain tests/test_netease_controls.cc -o "$test_dir/netease-controls"
+"$test_dir/netease-controls"
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined -Itests/registry_mocks -Imain \
+    tests/test_netease_intent.cc main/apps/netease/netease_json.cc -o "$test_dir/netease-intent"
+"$test_dir/netease-intent"
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined -Imain \
+    tests/test_aihot.cc main/apps/netease/netease_json.cc -o "$test_dir/aihot"
+"$test_dir/aihot"
+"${CXX:-c++}" -std=c++17 -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -Imain     tests/test_netease_dsp.cc -o "$test_dir/netease-dsp"
+"$test_dir/netease-dsp"
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined -Imain \
+    -Itests/registry_mocks tests/test_netease_performance.cc main/apps/netease/netease_json.cc -o "$test_dir/netease-performance"
+"$test_dir/netease-performance"
 echo "Host regression tests: PASS"

@@ -296,7 +296,7 @@ void build_dead_panel(lv_obj_t *parent) {
     lv_obj_set_width(title, 210);
     lv_obj_set_pos(title, 3, 10);
 
-    s_dead_score = px_label(panel, "0", &lv_font_montserrat_32, UI_SKY_DARK,
+    s_dead_score = px_label(panel, "0", &ui_digits_32, UI_SKY_DARK,
                             LV_TEXT_ALIGN_CENTER);
     lv_obj_set_width(s_dead_score, 210);
     lv_obj_set_pos(s_dead_score, 3, 34);
@@ -649,7 +649,7 @@ void build_ui() {
                            LV_TEXT_ALIGN_RIGHT);
     ui_pixel_status_text_align(s_score_lbl, 110, UI_STATUS_CONTENT_RIGHT - 110,
                                LV_TEXT_ALIGN_RIGHT);
-    s_battery = ui_pixel_battery_create(bar, 206, 6, UI_TEXT, &lv_font_montserrat_14);
+    s_battery = ui_pixel_battery_create(bar, UI_STATUS_BATTERY_X, 6, UI_TEXT, &lv_font_montserrat_14);
     ui_pixel_battery_set(&s_battery, bsp_battery_soc()); s_battery_us = esp_timer_get_time();
 
     build_pipes(s_screen);

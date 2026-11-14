@@ -3,14 +3,17 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const html=fs.readFileSync('main/apps/home/phone_setup.html','utf8');
 const cityCatalog=JSON.parse(fs.readFileSync('main/apps/home/cities.json','utf8'));
 const script=html.match(/<script>\r?\n([\s\S]*?)<\/script>/)[1];
+// The gzipped page receives its API token from the pt cookie set with it.
+{const line=script.split('\n').find(l=>l.includes('pt=('));for(const [cookie,t] of [['a=1; pt=4294967295','4294967295'],['xpt=9','']]){const w={};vm.runInNewContext(line,{window:w,document:{cookie}});assert.equal(w.__T,t)}}
 assert.ok(!/<(?:script|img|link)\b[^>]*(?:src|href)=["']https?:|url\(["']?https?:/i.test(html),'the captive page must not load internet resources');
-assert.match(html,/href="https:\/\/github.com\/manchunx7-bit\/folo-ai-passport-voice"/,'voice project is discoverable from phone setup');
+assert.match(html,/id="copyVoiceTutorial"[^>]*>复制教程链接/);
+assert.ok(!html.includes('AI-Passport-Hotkey-Windows.exe'));
 assert.match(html,/href="https:\/\/github.com\/manchunx7-bit\/ai-passport-muse"/,'Muse project is discoverable from phone setup');
 const elements=new Map(),requests=[],timers=new Map();let nextTimer=1;
 class Element {
  constructor(){this.value='';this.textContent='';this.style={};this.dataset={};this.options=[];this.classList={toggle(){}};this.type='password';this.files=[];}
  add(o){this.options.push(o)} replaceChildren(...o){this.options=o;this.value=''}
- appendChild(o){this.options.push(o);return o} click(){this.onclick?.()} setAttribute(k,v){this[k]=v} removeAttribute(k){delete this[k]} focus(){} setPointerCapture(){}
+ appendChild(o){this.options.push(o);return o} click(){this.onclick?.()} setAttribute(k,v){this[k]=v} removeAttribute(k){delete this[k]} focus(){} select(){} setSelectionRange(){} setPointerCapture(){}
  get selectedOptions(){return this.options.filter(o=>o.value===this.value)}
  getContext(){return {drawImage(){},fillRect(){},putImageData(){},getImageData:(x,y,w,h)=>({data:new Uint8ClampedArray(w*h*4).fill(255)}),createImageData:(w,h)=>({data:new Uint8ClampedArray(w*h*4)})}}
  toBlob(cb,type,quality){assert.equal(type,'image/jpeg');qualityAttempts.push(quality);cb(new Blob([new Uint8Array(typeof blobBytes==='function'?blobBytes(quality):blobBytes)],{type}))}
@@ -45,6 +48,17 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const posts=()=>requests.filter(r=>r.options.method==='POST');
 (async()=>{
  await flush();await flush();
+ let copiedText='';
+ context.document.execCommand=cmd=>{assert.equal(cmd,'copy');copiedText=get('voiceTutorialLink').value;return true};
+ await get('copyVoiceTutorial').onclick();assert.equal(copiedText,'https://github.com/manchunx7-bit/passport-os');assert.equal(get('voiceTutorialLink').hidden,true);
+ context.document.execCommand=()=>false;
+ await get('copyVoiceTutorial').onclick();assert.equal(get('voiceTutorialLink').hidden,false);assert.match(get('voiceCopyStatus').textContent,/长按/);
+ phoneWindow.isSecureContext=true;phoneNavigator.clipboard={writeText:async text=>{copiedText=text}};
+ await get('copyVoiceTutorial').onclick();assert.equal(get('voiceTutorialLink').hidden,true);
+ phoneNavigator.clipboard.writeText=async()=>{throw Error('denied')};
+ await get('copyVoiceTutorial').onclick();assert.equal(get('voiceTutorialLink').hidden,false);
+ phoneWindow.isSecureContext=false;
+
  assert.match(get('scanStatus').textContent,/等待扫描结果/);
  const retry=[...timers.entries()].find(([,t])=>t.ms===1500);assert.ok(retry,'empty first result must schedule a retry');
  emptyScan=false;timers.delete(retry[0]);await retry[1].fn();assert.match(get('scanStatus').textContent,/已找到 1/);
@@ -56,11 +70,11 @@ const posts=()=>requests.filter(r=>r.options.method==='POST');
  let req=posts().at(-1);assert.equal(req.url,'/api/connect?t=314159');assert.equal(JSON.parse(req.options.body).password,'  secret with spaces  ');
  state='failed';await context.poll();assert.equal(get('connect').disabled,false);assert.match(get('networkStatus').textContent,/检查密码/);
  await get('connect').onclick();state='connected';await context.poll();assert.equal(get('step2').hidden,false);assert.equal(get('password').value,'');
- get('name').value='新名字';get('address').value='工作室地址';
+ get('name').value='新名字';
  get('file').files=[{size:1000}];await get('file').onchange();
  get('shareFile').files=[{size:1000}];await get('shareFile').onchange();
  failShare=true;await get('save').onclick();assert.equal(posts().filter(r=>r.url.startsWith('/api/finish')).length,0,'failed image must not close hotspot');assert.equal(get('save').disabled,false);
- req=posts().find(r=>r.url.startsWith('/api/profile'));let profile=JSON.parse(req.options.body);assert.equal(profile.name,'新名字');assert.equal(profile.address,'工作室地址');assert.equal(profile.city,'自定义城市');assert.equal(profile.lat,'22.3','preserve custom weather coordinates');
+ req=posts().find(r=>r.url.startsWith('/api/profile'));let profile=JSON.parse(req.options.body);assert.equal(profile.name,'新名字');assert.equal(profile.address,'原地址','address field removed; saved value is preserved');assert.equal(profile.city,'自定义城市');assert.equal(profile.lat,'22.3','preserve custom weather coordinates');
  req=posts().find(r=>r.url.startsWith('/api/avatar'));assert.equal(req.options.body.byteLength,4976);assert.equal(req.options.body[4],3);
  // Failed avatar uploads retain the page and pending image for a later retry.
  for(const [code,message] of [['avatar_size',/长度不匹配/],['avatar_recv',/传输中断/],['avatar_store',/原头像已保留/]]){

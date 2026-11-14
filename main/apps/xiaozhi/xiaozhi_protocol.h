@@ -51,9 +51,9 @@ enum class EvType : uint8_t {
 };
 
 constexpr size_t kEventTextCap = 256;
-// 报文重组缓冲按"够用"来定，不按"保险"来定：这些是静态(BSS)占用，直接等额
-// 减少本就不足 90KB 的堆。服务端的 tts/stt 正文远小于 1KB，Opus 帧约 300 字节。
-constexpr size_t kMaxTextMessage = 768;   // 单条 JSON 报文重组上限
+// Text reassembly is session-owned so its 2 KB is returned when Xiaozhi exits.
+// Binary packets remain bounded; normal Opus frames are about 300 bytes.
+constexpr size_t kMaxTextMessage = 2048;  // MCP initialization + bounded tool arguments
 constexpr size_t kMaxBinaryMessage = 512;  // 单帧二进制（Opus）重组上限
 
 struct Event {
@@ -95,6 +95,9 @@ public:
     bool TriggerStartListen();
     bool TriggerStopListen();
     bool TriggerAbort();
+    // Process at most one queued tool request on the control task. NVS work
+    // must never run inside a WebSocket callback.
+    bool ProcessMcp();
 
     // 发送压缩后的 Opus 音频帧（录音任务调用，内部有界超时）
     bool SendAudio(const uint8_t *opus_data, size_t len);
@@ -121,6 +124,16 @@ private:
     bool SendJson(const std::string &json);
     void LoadIdentity();
     void ResetRx();
+    struct McpRequest { int32_t id; char method[24]; char params[512]; };
+    QueueHandle_t mcp_queue_{nullptr};
+    // Requests refused before queueing still need an error reply. A burst
+    // against a full queue must not overwrite an earlier refused id.
+    static constexpr size_t kRejectedSlots = 4;
+    std::atomic<int32_t> rejected_mcp_ids_[kRejectedSlots]{{-1}, {-1}, {-1}, {-1}};
+    void RejectMcp(int32_t id);
+    struct McpReply { int32_t id=-1; uint32_t hash=0; std::string response; };
+    McpReply mcp_replies_[4];
+    unsigned mcp_reply_cursor_=0;
 
     esp_websocket_client_handle_t client_{nullptr};
     std::atomic<State> state_{State::Disconnected};
@@ -137,7 +150,7 @@ private:
     int server_sample_rate_{16000};
 
     // 文本报文重组缓冲（仅 websocket 任务访问）
-    char   rx_text_[kMaxTextMessage];
+    char  *rx_text_{nullptr}; // allocated for a session, released after socket join
     size_t rx_text_len_{0};
     size_t rx_text_expect_{0};
     uint8_t rx_opcode_{0};

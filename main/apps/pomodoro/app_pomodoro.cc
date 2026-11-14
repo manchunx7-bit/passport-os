@@ -130,7 +130,7 @@ void start() {
     lv_obj_t *top = ui_pixel_top_bar(s_screen);
     lv_obj_t *title = ui_pixel_label(top, "番茄时钟", &buddy_font_16, UI_TEXT);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 12, 0);
-    s_battery = ui_pixel_battery_create(top, 206, 6, UI_TEXT, &lv_font_montserrat_14);
+    s_battery = ui_pixel_battery_create(top, UI_STATUS_BATTERY_X, 6, UI_TEXT, &lv_font_montserrat_14);
     s_phase = label("", &pomodoro_font_20, UI_ACCENT, 12, 49, 216, 28);
     s_time = label("", &pomodoro_digits_48, UI_TEXT, 12, 90, 216, 62);
     s_status = label("", &buddy_font_16, UI_TEXT_DIM, 12, 154, 216, 24);
@@ -197,6 +197,26 @@ void on_key(uint8_t button, app_btn_event_t event, uint16_t) {
 
 void pomodoro_export_state(pomodoro_t *out) { *out = s_clock; }
 void pomodoro_import_state(const pomodoro_t &state) { s_clock = state; }
+
+bool pomodoro_control(pomodoro_action_t action, uint8_t phase,
+                      PomodoroSnapshot *out, pomodoro_command_result_t *result) {
+    if (!bsp_lvgl_lock(50)) return false;
+    const uint64_t now = esp_timer_get_time();
+    *result = pomodoro_command(&s_clock, action, phase, now);
+    if (*result == POMODORO_COMMAND_OK && action != POMODORO_QUERY) {
+        s_reset_confirm = false;
+        remove_notice();
+        if (!s_clock.sound_pending) ui_sfx_cancel_alarm();
+        refresh();
+    }
+    *out = {pomodoro_remaining_seconds(&s_clock, now), s_clock.completed,
+            s_clock.phase, s_clock.status};
+    ESP_LOGI(kTag, "voice action=%u result=%u status=%u phase=%u remaining=%u completed=%u",
+        unsigned(action), unsigned(*result), unsigned(out->status), unsigned(out->phase),
+        unsigned(out->remaining_seconds), unsigned(out->completed));
+    bsp_lvgl_unlock();
+    return true;
+}
 
 void pomodoro_service_tick() {
     if (!bsp_lvgl_lock(30)) return;

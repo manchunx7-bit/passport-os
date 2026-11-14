@@ -9,6 +9,7 @@
 #include "bsp_audio.h"
 #include "ui_sfx.h"
 #include "bsp_battery.h"
+#include "launcher/battery_guard.h"
 #include "bsp_display.h"
 #include "ui_pixel.h"
 #include "app_fonts.h"
@@ -62,7 +63,7 @@ T validated(const T (&values)[N], T value, T fallback) {
 template <typename T, size_t N>
 T next_value(const T (&values)[N], T current) {
     for (size_t i = 0; i < N; ++i) {
-        if (values[i] == current) return values[(i + 1) % N];
+        if (values[i] > current) return values[i];
     }
     return values[0];
 }
@@ -83,7 +84,7 @@ void save_all() {
 void apply_settings() {
     s_outdoor_until_us = 0;
     bsp_audio_set_master_volume(s_volume);
-    bsp_display_set_master_brightness(s_brightness);
+    bsp_display_set_master_brightness(battery_brightness(bsp_battery_soc(), s_brightness));
     app_registry_set_screen_timeout(s_timeout);
     ui_theme_set(s_theme);
 }
@@ -95,7 +96,7 @@ void refresh_ui() {
         const size_t first = s_selected < 7 ? 0 : kRowCount - 7;
         lv_obj_set_flag(s_rows[i], LV_OBJ_FLAG_HIDDEN, s_reset_pending || i < first || i >= first + 7);
         if (i >= first) lv_obj_set_y(s_rows[i], 38 + static_cast<int>(i - first) * 29);
-        const uint32_t focus = s_reset_pending && i == 6 ? UI_DANGER : UI_ACCENT;
+        const uint32_t focus = s_reset_pending && i == 8 ? UI_DANGER : UI_ACCENT;
         ui_pixel_bg_color(s_rows[i], selected ? focus : UI_BG);
         ui_pixel_text_color(s_names[i], selected ? UI_ON_ACCENT : UI_TEXT);
         ui_pixel_text_color(s_values[i], selected ? UI_ON_ACCENT : UI_TEXT_DIM);
@@ -116,13 +117,13 @@ void refresh_ui() {
     lv_label_set_text(s_values[3], ui_theme_name(s_theme));
     lv_label_set_text(s_values[4], ui_sfx_enabled() ? "开" : "关");
     lv_label_set_text(s_values[5], "打开");
-    lv_label_set_text(s_values[6], s_reset_pending ? "再次确定" : "恢复");
-    lv_label_set_text(s_values[7], "打开");
-    lv_label_set_text(s_values[8], "查看");
+    lv_label_set_text(s_values[6], "打开");
+    lv_label_set_text(s_values[7], "查看");
+    lv_label_set_text(s_values[8], s_reset_pending ? "再次确定" : "恢复");
     static const char *hints[kRowCount] = {
         "确定后上下调音量", "长按下键满亮两分钟",
         "确定切换熄屏时间", "确定切换主题",
-        "轻触反馈", "手机配网、资料与名片", "仅恢复设备设置", "设备选网与已存网络", "查看网络、时间与电量"
+        "轻触反馈", "手机配网、资料与名片", "设备选网与已存网络", "查看网络、时间与电量", "仅恢复设备设置"
     };
     lv_obj_set_flag(s_confirm, LV_OBJ_FLAG_HIDDEN, !s_reset_pending);
     lv_obj_set_flag(s_help, LV_OBJ_FLAG_HIDDEN, s_reset_pending);
@@ -167,14 +168,14 @@ void create_ui() {
     ui_pixel_background(s_screen);
 
     lv_obj_t *top = ui_pixel_top_bar(s_screen);
-    ui_pixel_wifi_bars_create(top, 12, 18, s_wifi_bars);
+    ui_pixel_wifi_bars_create(top, UI_STATUS_WIFI_X, 18, s_wifi_bars);
     lv_obj_t *title = ui_pixel_label(top, "设置", &buddy_font_16, UI_TEXT);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 42, 0);
-    s_battery = ui_pixel_battery_create(top, 206, 6, UI_TEXT, &lv_font_montserrat_14);
+    s_battery = ui_pixel_battery_create(top, UI_STATUS_BATTERY_X, 6, UI_TEXT, &lv_font_montserrat_14);
     ui_pixel_battery_set(&s_battery, bsp_battery_soc());
 
     static const char *labels[kRowCount] = {
-        "音量", "屏幕亮度", "自动熄屏", "外观主题", "按键音效", "手机设置", "恢复默认", "无线网络", "网络与时间"
+        "音量", "屏幕亮度", "自动熄屏", "外观主题", "按键音效", "手机设置", "无线网络", "网络与时间", "恢复默认"
     };
     for (size_t i = 0; i < kRowCount; ++i) {
         const int y = 38 + static_cast<int>(i) * 29;
@@ -306,6 +307,12 @@ void settings_on_key(uint8_t btn, app_btn_event_t event, uint16_t) {
                 app_registry_switch_to(APP_ID_WIFI);
                 return;
             case 6:
+                settings_stop();
+                if (!wifi_picker_open()) settings_start();
+                return;
+            case 7:
+                settings_stop(); network_diagnostics_open(); return;
+            case 8:
                 if (!s_reset_pending) {
                     s_reset_pending = true;
                     bsp_lvgl_lock(-1);
@@ -321,12 +328,6 @@ void settings_on_key(uint8_t btn, app_btn_event_t event, uint16_t) {
                 ui_sfx_set_enabled(true);
                 rebuild = true;
                 break;
-            case 7:
-                settings_stop();
-                if (!wifi_picker_open()) settings_start();
-                return;
-            case 8:
-                settings_stop(); network_diagnostics_open(); return;
         }
         apply_settings();
         save_all();
@@ -361,9 +362,7 @@ void settings_tick(void) {
     const int64_t until = s_outdoor_until_us.load();
     if (until && esp_timer_get_time() >= until) {
         s_outdoor_until_us = 0;
-        const int battery = bsp_battery_soc();
-        const uint8_t brightness = s_outdoor_restore.load();
-        bsp_display_set_master_brightness(battery >= 0 && battery < 10 ? std::min<uint8_t>(brightness, 60) : brightness);
+        bsp_display_set_master_brightness(battery_brightness(bsp_battery_soc(), s_outdoor_restore.load()));
     }
 }
 
@@ -383,7 +382,7 @@ void settings_bootstrap(void) {
         nvs_close(handle);
     }
     if (s_volume > 100) s_volume = 80;
-    s_brightness = validated(kBrightness, s_brightness, static_cast<uint8_t>(80));
+    if (s_brightness < 10 || s_brightness > 100) s_brightness = 80;
     s_timeout = validated(kTimeouts, s_timeout, static_cast<uint16_t>(60));
     ui_theme_set(s_theme);
     apply_settings();
@@ -392,21 +391,38 @@ void settings_bootstrap(void) {
              static_cast<unsigned>(s_timeout), ui_theme_name(s_theme));
 }
 
-void settings_set_volume(uint8_t percent) {
-    percent = std::min<uint8_t>(percent, 100);
-    const bool changed = s_volume != percent;
-    s_volume = percent;
-    bsp_audio_set_master_volume(percent);
-    if (!changed) return;
-
+namespace {
+bool save_percent(const char *key, uint8_t percent) {
     nvs_handle_t handle;
     esp_err_t result = nvs_open(kNvsNamespace, NVS_READWRITE, &handle);
     if (result == ESP_OK) {
-        result = nvs_set_u8(handle, "volume", percent);
+        result = nvs_set_u8(handle, key, percent);
         if (result == ESP_OK) result = nvs_commit(handle);
         nvs_close(handle);
     }
-    if (result != ESP_OK) ESP_LOGW(kTag, "Failed to save volume: %s", esp_err_to_name(result));
+    if (result != ESP_OK) ESP_LOGW(kTag, "Failed to save %s: %s", key, esp_err_to_name(result));
+    return result == ESP_OK;
+}
+}
+uint8_t settings_get_volume(void) { return s_volume; }
+uint8_t settings_get_brightness(void) { return s_brightness; }
+bool settings_save_volume(uint8_t percent) {
+    if (percent > 100 || !save_percent("volume", percent)) return false;
+    s_volume = percent;
+    bsp_audio_set_master_volume(percent);
+    return true;
+}
+bool settings_save_brightness(uint8_t percent) {
+    if (percent < 10 || percent > 100 || !save_percent("brightness", percent)) return false;
+    s_brightness = percent;
+    s_outdoor_until_us = 0;
+    s_outdoor_restore = percent;
+    bsp_display_set_master_brightness(battery_brightness(bsp_battery_soc(), percent));
+    return true;
+}
+void settings_set_volume(uint8_t percent) {
+    percent = std::min<uint8_t>(percent, 100);
+    if (s_volume != percent) settings_save_volume(percent);
 }
 
 const passport_app_t g_settings_app = {

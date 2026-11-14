@@ -3,6 +3,7 @@
 #include "apps/radio/radio_player.h"
 #include "apps/radio/radio_catalog.h"
 #include "apps/home/home_profile.h"
+#include "voice_intent.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -15,9 +16,11 @@
 #include "esp_heap_caps.h"
 #include "esp_wifi.h"
 #include <atomic>
+#include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 static const char *TAG = "app_radio";
 
@@ -35,8 +38,39 @@ std::atomic<bool> s_catalog_cancel{false};
 // for several seconds each time.
 std::atomic<bool> s_catalog_installed{false};
 SemaphoreHandle_t s_catalog_commit = nullptr;
+// Xiaozhi voice request for this session (heap; the catalog worker takes it).
+std::atomic<voice_intent::Request *> s_voice{nullptr};
+// Voice "stop after N minutes": pauses (never powers off, unlike the settings
+// sleep timer). The task waits for app stop after firing, so its handle stays
+// valid for the notification that ends it.
+TaskHandle_t s_stop_task = nullptr;
+std::atomic<bool> s_stop_running{false};
+
+void stop_worker(void *arg) {
+    const uint32_t minutes = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(arg));
+    if (!ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(minutes * 60000u)) && s_radio_active.load()) {
+        ESP_LOGI(TAG, "Voice stop timer: pausing after %u min", (unsigned)minutes);
+        radio_player_set_playing(false);
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    }
+    s_stop_running.store(false);
+    vTaskDelete(nullptr);
+}
+
+void end_stop_timer() {
+    if (!s_stop_running.load()) return;
+    xTaskNotifyGive(s_stop_task);
+    for (int waited = 0; s_stop_running.load() && waited < 500; waited += 10) vTaskDelay(pdMS_TO_TICKS(10));
+}
 
 bool catalog_cancelled() { return s_catalog_cancel.load() || !s_radio_active.load(); }
+
+// First station whose name contains the spoken keywords, else the top one.
+std::size_t voice_station(const RadioStation *stations, std::size_t count, const char *keywords) {
+    if (keywords && keywords[0])
+        for (std::size_t i = 0; i < count; ++i) if (std::strstr(stations[i].name, keywords)) return i;
+    return 0;
+}
 
 void catalog_worker(void *arg) {
     (void)arg;
@@ -66,15 +100,24 @@ void catalog_worker(void *arg) {
         vTaskDelete(nullptr);
         return;
     }
-    home_profile_t profile;
-    home_profile_get(&profile);
+    voice_intent::Request *voice = s_voice.exchange(nullptr);
     RadioLocation preferred = {}, loc = {};
-    std::snprintf(preferred.city, sizeof(preferred.city), "%s", profile.city);
-    std::snprintf(preferred.region, sizeof(preferred.region), "%s", profile.region);
-    std::snprintf(preferred.search_city, sizeof(preferred.search_city), "%s", profile.radio_city);
-    std::snprintf(preferred.country_code, sizeof(preferred.country_code), "%s", profile.country_code);
+    if (voice) {
+        // A spoken city replaces the profile city for this session only.
+        // The tool limits the name to this field; preferred is zero-filled.
+        std::memcpy(preferred.city, voice->name,
+                    std::min(std::strlen(voice->name), sizeof(preferred.city) - 1));
+        std::snprintf(preferred.country_code, sizeof(preferred.country_code), "CN");
+    } else {
+        home_profile_t profile;
+        home_profile_get(&profile);
+        std::snprintf(preferred.city, sizeof(preferred.city), "%s", profile.city);
+        std::snprintf(preferred.region, sizeof(preferred.region), "%s", profile.region);
+        std::snprintf(preferred.search_city, sizeof(preferred.search_city), "%s", profile.radio_city);
+        std::snprintf(preferred.country_code, sizeof(preferred.country_code), "%s", profile.country_code);
+    }
     std::size_t found = radio_catalog_discover_location(preferred, stations, kDiscoveryCapacity,
-                                                       &loc, catalog_cancelled);
+                                                       &loc, catalog_cancelled, voice ? voice->detail : nullptr);
     // Serialize installation/start with stop; no late playback in the next app.
     xSemaphoreTake(s_catalog_commit, portMAX_DELAY);
     const bool alive = !catalog_cancelled() && s_ui_alive.load();
@@ -82,8 +125,10 @@ void catalog_worker(void *arg) {
         ESP_LOGI(TAG, "Location detected: %s (%s), found %u stations", loc.city, loc.region, (unsigned)found);
         radio_ui_set_location(loc.city);
         radio_player_replace_stations_resuming(stations, found);
+        if (voice) radio_player_set_station(voice_station(stations, found, voice->detail));
         s_catalog_installed.store(true);
     }
+    delete voice;
     std::free(stations);
     if (alive) {
         // Start the MP3 decoder only after directory HTTP/cJSON is released.
@@ -152,6 +197,17 @@ void radio_app_start(void) {
     if (s_radio_active.load()) {
         ESP_LOGW(TAG, "Radio App is already active");
         return;
+    }
+    const voice_intent::Request request = voice_intent::take(APP_ID_RADIO);
+    if (request.source == voice_intent::Source::Radio) {
+        delete s_voice.exchange(new (std::nothrow) voice_intent::Request(request));
+        if (request.stop_minutes) {
+            end_stop_timer();
+            s_stop_running.store(true);
+            if (xTaskCreate(stop_worker, "radio_stop", 2048,
+                            reinterpret_cast<void *>(static_cast<uintptr_t>(request.stop_minutes)), 4,
+                            &s_stop_task) != pdPASS) s_stop_running.store(false);
+        }
     }
     // 1. 显示 Radio UI 界面
     radio_ui_show_main();
@@ -243,6 +299,7 @@ void radio_app_stop(void) {
     //    小智/语音时极易分配失败。这里等 5s 上界,超时也不 vTaskDelete
     //    (它可能正持堆锁),只记日志由它自行退出。
     s_ui_alive.store(false);
+    end_stop_timer();
     int waited_ms = 0;
     while (s_catalog_running.load() && waited_ms < 5000) {
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -251,6 +308,9 @@ void radio_app_stop(void) {
     if (s_catalog_running.load()) {
         ESP_LOGW(TAG, "catalog task still running after 5s; left to exit by itself");
     }
+
+    // An unused voice request (no catalog ran) must not apply to a later visit.
+    if (!s_catalog_running.load()) delete s_voice.exchange(nullptr);
 
     // 3. 移除事件回调，保留全局 Wi-Fi 连接
     WifiManager::GetInstance().SetEventCallback(nullptr);

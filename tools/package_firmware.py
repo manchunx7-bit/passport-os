@@ -15,7 +15,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIRS = {'.github', 'bootloader_components', 'components', 'docs', 'main', 'tests', 'third_party', 'tools', 'web'}
 SOURCE_ROOT_FILES = {'.gitignore', 'CMakeLists.txt', 'build.sh', 'dependencies.lock',
-                     'partitions.csv', 'sdkconfig.defaults', 'LICENSE', 'README.md', 'README.zh_CN.md'}
+                     'partitions.csv', 'sdkconfig.defaults', 'LICENSE', 'README.md', 'README.zh_CN.md', 'DESIGN.md', 'PRODUCT.md', 'AGENTS.md', 'sdkconfig.diag'}
 
 
 def digest(data: bytes) -> str:
@@ -108,7 +108,7 @@ def main() -> None:
                         chip='esp32c3', flash_bytes=8388608, esp_idf='5.5.3',
                         images=[dict(file=app_name, offset='0x10000', **files[app_name]),
                                 dict(file=full_name, offset='0x0', **files[full_name])],
-                        source=dict(reference_head=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT).decode().strip(),
+                        source=dict(reference_head=(subprocess.run(['git', 'rev-parse', '--verify', 'HEAD'], cwd=ROOT, capture_output=True, text=True).stdout.strip() or None),
                                     dirty=bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)),
                                     authoritative_snapshot=source_name, file_count=len(source),
                                     note='Source ZIP and per-file hashes identify this candidate; reference HEAD alone does not.'),

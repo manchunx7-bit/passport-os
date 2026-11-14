@@ -12,12 +12,21 @@ public:
     RadioSource(Cancelled cancelled, void *context, void *workspace = nullptr, size_t workspace_bytes = 0)
         : cancelled_(cancelled), context_(context), workspace_(workspace), workspace_bytes_(workspace_bytes) {}
     ~RadioSource();
-    bool open(const char *url);
+    // Optional client identity and request buffer for long signed URLs (the
+    // NetEase CDN); call before open(). Radio keeps the 512 B default.
+    void set_client(const char *agent, const char *referer, int tx_bytes) {
+        agent_ = agent; referer_ = referer; tx_bytes_ = tx_bytes;
+    }
+    // offset > 0 asks for "Range: bytes=offset-"; check status() for 206.
+    bool open(const char *url, uint32_t offset = 0);
     int read(uint8_t *data, size_t size);
     bool complete() const { return finished_; }
     bool oom() const { return oom_; }
     uint32_t icy_interval() const { return icy_interval_; }
     esp_audio_simple_dec_type_t type() const { return type_; }
+    // Body length of the final response (after redirects); 0 when unknown.
+    uint32_t content_length() const { return content_length_; }
+    int status() const { return status_; }
 private:
     struct Hls;
     Hls *hls_{};
@@ -28,6 +37,12 @@ private:
     size_t workspace_bytes_{};
     bool finished_{}, oom_{};
     uint32_t icy_interval_{};
+    uint32_t range_start_{};
+    const char *agent_ = "AI-Passport-Radio/0.2.0-rc.54";
+    const char *referer_ = nullptr;
+    int tx_bytes_ = 512;
+    uint32_t content_length_{};
+    int status_{};
     char mime_[80]{};
     uint8_t prefix_[564]{};
     size_t prefix_size_{}, prefix_pos_{};

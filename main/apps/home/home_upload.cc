@@ -54,7 +54,8 @@ static bool token_ok(httpd_req_t *req) {
 // ---------------------------------------------------------------------------
 // Phone-side crop, pixel grid and four-tone quantization; upload packed 2bpp indices.
 // ---------------------------------------------------------------------------
-extern const char phone_page_start[] asm("_binary_phone_setup_html_start");
+extern const char phone_page_start[] asm("_binary_phone_setup_html_gz_start");
+extern const char phone_page_end[] asm("_binary_phone_setup_html_gz_end");
 extern const char cities_start[] asm("_binary_cities_json_gz_start");
 extern const char cities_end[] asm("_binary_cities_json_gz_end");
 static std::atomic<int> s_network_state{0}; // 0 idle, 1 connecting, 2 verified, 3 failed
@@ -91,19 +92,14 @@ static esp_err_t handler_index(httpd_req_t *req) {
         return handler_captive(req);
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store, max-age=0");
-    // 先把一次性 token 注入成 window.__T,再原样输出页面 —— 用分块发送避免
-    // 为了替换占位符而整页复制一遍(页面约 5KB,httpd 任务栈不宽裕)。
-    char head[48];
-    int n = std::snprintf(head, sizeof(head), "<script>window.__T='%lu'</script>",
-                          (unsigned long)s_token);
-    // Keep the doctype first so phone browsers use standards mode.
-    const char *insert = strstr(phone_page_start, "<head>") + 6;
-    httpd_resp_send_chunk(req, phone_page_start, insert - phone_page_start);
-    httpd_resp_sendstr_chunk(req, head);
-    httpd_resp_sendstr_chunk(req, insert);
-    httpd_resp_send_chunk(req, nullptr, 0);
-    (void)n;
-    return ESP_OK;
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    // 页面在 flash 中已 gzip,无法再原样注入;一次性 token 改由 cookie 交给页面脚本
+    // (页面读出后仍走 t= 参数鉴权,cookie 本身不参与鉴权,不引入 CSRF)。
+    char cookie[48];
+    std::snprintf(cookie, sizeof(cookie), "pt=%lu; Path=/; SameSite=Strict",
+                  (unsigned long)s_token);
+    httpd_resp_set_hdr(req, "Set-Cookie", cookie);
+    return httpd_resp_send(req, phone_page_start, phone_page_end - phone_page_start);
 }
 
 static esp_err_t handler_cities(httpd_req_t *req) {

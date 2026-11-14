@@ -68,5 +68,30 @@ int main(){
     for(int i=0;i<100;++i){start();assert(mock_objects==page_objects&&mock_timers==1);stop();assert(!mock_objects&&!mock_timers);}
     mock_lock_available=false;pomodoro_service_tick();assert(mock_locks==0);
     mock_lock_available=true;
+    // Voice can control the actual clock without creating a UI or stealing
+    // foreground. All operations share the same lock as keys and heartbeat.
+    s_clock=POMODORO_INITIALIZER;mock_foreground=APP_ID_XIAOZHI;sound_available=false;
+    PomodoroSnapshot snapshot;pomodoro_command_result_t result;
+    mock_lock_available=false;
+    assert(!pomodoro_control(POMODORO_START,0,&snapshot,&result));
+    assert(s_clock.status==POMODORO_READY);
+    mock_lock_available=true;
+    assert(pomodoro_control(POMODORO_START,0,&snapshot,&result));
+    assert(result==POMODORO_COMMAND_OK&&snapshot.status==POMODORO_RUNNING&&snapshot.remaining_seconds==1500);
+    assert(!mock_objects&&!mock_timers&&!mock_locks&&mock_foreground==APP_ID_XIAOZHI);
+    mock_now+=7000000;
+    assert(pomodoro_control(POMODORO_PAUSE,0,&snapshot,&result)&&snapshot.remaining_seconds==1493);
+    mock_now+=60000000;
+    assert(pomodoro_control(POMODORO_QUERY,0,&snapshot,&result)&&snapshot.remaining_seconds==1493);
+    start();assert(s_time->text=="24:53");
+    assert(pomodoro_control(POMODORO_RESUME,0,&snapshot,&result)&&s_clock.status==POMODORO_RUNNING);
+    stop();mock_now=s_clock.deadline_us;mock_awake=false;
+    pomodoro_service_tick();assert(mock_awake&&s_clock.completed==1&&s_clock.sound_pending);
+    assert(mock_foreground==APP_ID_XIAOZHI);
+    mock_foreground=APP_ID_HOME;sound_available=true;
+    const auto sounds=sound_notices;
+    pomodoro_service_tick();assert(sound_notices==sounds+1&&!s_clock.sound_pending);
+    assert(pomodoro_control(POMODORO_RESET,0,&snapshot,&result));
+    assert(!mock_objects&&!mock_timers&&snapshot.status==POMODORO_READY&&snapshot.completed==1);
     puts("Pomodoro application: real key handlers, reset/cancel, background, low-memory deferral, transition deferral, one notice, timeout/wake, no foreground switch and 100 leak-free UI cycles PASS");
 }

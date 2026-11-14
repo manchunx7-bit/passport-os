@@ -1,10 +1,12 @@
 // Xiaozhi: shared terminal conversation view and bounded UTF-8 replies.
 #include "apps/xiaozhi/xiaozhi_ui.h"
+#include "apps/xiaozhi/xiaozhi_face.h"
+#include "apps/xiaozhi/xiaozhi_audio.h"
 #include "bsp_display.h"
 #include "bsp_battery.h"
 #include "launcher/app_registry.h"
 #include "ui_pixel.h"
-#include "ui/pixel_scene.h"
+#include "ui_palette.h"
 #include "display_text.h"
 #include "utf8_tail.h"
 #include "app_fonts.h"
@@ -34,6 +36,11 @@ lv_obj_t *s_ai_text_label = nullptr;
 lv_obj_t *s_hint_label = nullptr;
 lv_obj_t *s_companion = nullptr;
 State s_face_state = State::Idle;
+uint32_t s_badge_color = 0;
+face::Animator s_face_animator;
+face::Pose s_face_pose{};
+face::Waveform s_waveform;
+lv_timer_t *s_face_timer = nullptr;
 lv_timer_t *s_volume_timer = nullptr;
 lv_timer_t *s_status_timer = nullptr;
 ui_pixel_battery_t s_battery{};
@@ -43,8 +50,14 @@ const char *s_default_hint = "确定说话 · 上下音量";
 // 文本内容也只在持锁时读写，避免与 lv_label 生命周期脱节。
 std::string s_user_text;
 std::string s_ai_reply_buffer;
+bool s_text_expanded = false;
 
 constexpr size_t kMaxTextBytes = 1200;  // up to 400 three-byte Han characters
+constexpr int kTextLineSpace = 4;
+
+int text_height_for_lines(int lines) {
+    return lines * buddy_font_16.line_height + (lines - 1) * kTextLineSpace;
+}
 
 void refresh_status_bar() {
     ui_pixel_battery_set(&s_battery, bsp_battery_soc());
@@ -55,43 +68,67 @@ void refresh_status_bar() {
     ui_pixel_wifi_bars_set(s_wifi_bars, bars, connected ? UI_TEXT : UI_TEXT_DIM);
 }
 
-void draw_companion(lv_event_t *event) {
-    pixel_scene::Ink ink(event);
-    const bool error = s_face_state == State::Error || s_face_state == State::Disconnected;
-    const bool thinking = s_face_state == State::Thinking || s_face_state == State::Connecting;
-    const bool listening = s_face_state == State::Listening;
-    const uint32_t accent = error ? UI_DANGER : thinking ? UI_WARNING : UI_ACCENT;
-    ink.box(14, 26, 96, 52, UI_SURFACE);
-    ink.box(22, 18, 80, 68, UI_SURFACE);
-    ink.frame(22, 18, 80, 68, UI_BORDER, 2);
-    ink.box(14, 34, 8, 24, accent); ink.box(102, 34, 8, 24, accent);
-    ink.box(60, 8, 4, 10, accent); ink.box(56, 4, 12, 6, accent);
-    const int eye_y = thinking ? 38 : 42;
-    ink.box(36, eye_y, 10, error ? 4 : 14, accent);
-    ink.box(78, eye_y, 10, error ? 4 : 14, accent);
-    if (s_face_state == State::Speaking) ink.frame(52, 62, 20, 12, accent, 3);
-    else {
-        ink.box(52, 68, 20, 3, accent);
-        if (!error) { ink.box(48, 64, 4, 4, accent); ink.box(72, 64, 4, 4, accent); }
+face::Activity face_activity(State state) {
+    switch (state) {
+    case State::Disconnected: return face::Activity::Offline;
+    case State::Connecting:   return face::Activity::Connecting;
+    case State::Listening:    return face::Activity::Listening;
+    case State::Thinking:     return face::Activity::Thinking;
+    case State::Speaking:     return face::Activity::Speaking;
+    case State::Error:        return face::Activity::Error;
+    default:                  return face::Activity::Idle;
     }
-    ink.box(34, 90, 56, 4, UI_BORDER);
-    if (listening) {
-        ink.box(4, 36, 3, 22, accent); ink.box(117, 36, 3, 22, accent);
-    }
-    if (thinking) for (int i = 0; i < 3; ++i) ink.box(50 + i * 10, 103, 4, 4, accent);
 }
 
-// Once a long reply scrolls, the half-hidden top line fades out in four
-// pixel steps instead of being sliced by the container edge.
-void draw_reading_fade(lv_event_t *event) {
-    auto *box = static_cast<lv_obj_t *>(lv_event_get_target(event));
-    if (lv_obj_get_scroll_y(box) <= 0) return;
-    pixel_scene::Ink ink(event);
-    static const lv_opa_t steps[] = {LV_OPA_COVER, LV_OPA_70, LV_OPA_40, LV_OPA_20};
-    for (int i = 0; i < 4; ++i) {
-        ink.paint.bg_opa = steps[i];
-        ink.box(0, i * 4, lv_obj_get_width(box), 4, UI_BG);
-    }
+face::Palette face_palette() {
+    const ui_theme_t theme = ui_theme_get();
+    const bool classic = theme == UI_THEME_CLASSIC;
+    face::Palette p{};
+    p.shell = UI_SURFACE;
+    p.edge = UI_BORDER;
+    // The light theme gets a dark visor so the eyes still glow.
+    p.screen = theme == UI_THEME_PLAYFUL ? UI_TEXT : UI_BG;
+    p.eye = s_face_state == State::Error ? UI_DANGER : UI_ACCENT;
+    p.glint = classic ? UI_TEXT : 0xFFFFFF;
+    p.blush = classic ? UI_ACCENT : theme == UI_THEME_NEON ? UI_SECONDARY : UI_DANGER;
+    p.tear = classic ? UI_TEXT : theme == UI_THEME_PLAYFUL ? UI_SECONDARY : 0x8FC7EF;
+    p.warn = UI_WARNING;
+    return p;
+}
+
+void draw_companion(lv_event_t *event) {
+    lv_area_t area;
+    lv_obj_get_coords(static_cast<lv_obj_t *>(lv_event_get_target(event)), &area);
+    face::draw_big(lv_event_get_layer(event), area, s_face_pose, face_palette());
+}
+
+void draw_badge(lv_event_t *event) {
+    lv_area_t area;
+    lv_obj_get_coords(static_cast<lv_obj_t *>(lv_event_get_target(event)), &area);
+    face::draw_mini(lv_event_get_layer(event), area, s_face_pose, face_palette(), s_badge_color);
+}
+
+// Runs inside lv_timer_handler (LVGL lock held). Redraw only when the pose
+// changed, and not at all while the panel sleeps.
+void face_tick(lv_timer_t *timer) {
+    // Like the radio and music timers: idle at 1 Hz while the panel is off.
+    const bool visible = app_registry_screen_is_on();
+    lv_timer_set_period(timer, visible ? face::kFramePeriodMs : 1000);
+    if (!s_screen || !visible) return;
+    face::Pose pose = s_face_animator.step(face_activity(s_face_state));
+    const bool audio_active = s_face_state == State::Listening || s_face_state == State::Speaking;
+    if (audio_active) s_waveform.step(AudioService::VisualLevel());
+    else s_waveform.clear();
+    for (int i = 0; i < face::kWaveBars; ++i) pose.bars[i] = s_waveform.bars[i];
+    if (pose == s_face_pose) return;
+    s_face_pose = pose;
+    if (s_companion && !lv_obj_has_flag(s_companion, LV_OBJ_FLAG_HIDDEN)) lv_obj_invalidate(s_companion);
+    if (s_status_badge) lv_obj_invalidate(s_status_badge);
+}
+
+void set_badge_color(uint32_t color) {
+    s_badge_color = color;
+    if (s_status_badge) lv_obj_invalidate(s_status_badge);
 }
 
 void show_companion(bool visible) {
@@ -99,19 +136,34 @@ void show_companion(bool visible) {
     if (visible) {
         lv_obj_remove_flag(s_companion, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(s_msg_container, 12, 212);
-        lv_obj_set_height(s_msg_container, 52);
+        lv_obj_set_height(s_msg_container, text_height_for_lines(2));
     } else {
         lv_obj_add_flag(s_companion, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(s_msg_container, 12, 78);
-        lv_obj_set_height(s_msg_container, 186);
+        lv_obj_set_pos(s_msg_container, 12, 76);
+        lv_obj_set_height(s_msg_container, text_height_for_lines(8));
     }
 }
 
+bool companion_needed() {
+    return !s_text_expanded && (s_face_state == State::Listening ||
+           s_face_state == State::Thinking || s_face_state == State::Speaking ||
+           (s_user_text.empty() && s_ai_reply_buffer.empty()));
+}
+
 void conversation_layout() {
-    show_companion(false);
     lv_obj_set_flex_align(s_msg_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
                          LV_FLEX_ALIGN_START);
     lv_obj_set_style_text_align(s_ai_text_label, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_update_layout(s_msg_container);
+    // Measure the wrapped labels, including the gap between user and AI.
+    // More than two lines gets the full reading area even while speaking.
+    const bool have_ai = !lv_obj_has_flag(s_ai_text_label, LV_OBJ_FLAG_HIDDEN);
+    int content_height = have_ai ? lv_obj_get_height(s_ai_text_label) : 0;
+    if (!lv_obj_has_flag(s_user_text_label, LV_OBJ_FLAG_HIDDEN)) {
+        content_height += lv_obj_get_height(s_user_text_label) + (have_ai ? kTextLineSpace : 0);
+    }
+    s_text_expanded = content_height > text_height_for_lines(2);
+    show_companion(companion_needed());
 }
 
 // 滚动到消息区底部，保证最新一轮对话可见
@@ -146,6 +198,10 @@ void ui_init() {
         lv_timer_delete(s_status_timer);
         s_status_timer = nullptr;
     }
+    if (s_face_timer) {
+        lv_timer_delete(s_face_timer);
+        s_face_timer = nullptr;
+    }
 
     if (s_screen) {
         lv_obj_delete(s_screen);
@@ -161,16 +217,17 @@ void ui_init() {
     s_face_state = State::Idle;
     s_user_text.clear();
     s_ai_reply_buffer.clear();
+    s_text_expanded = false;
 
     s_screen = lv_obj_create(nullptr);
     lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
     ui_pixel_background(s_screen);
 
     auto *header = ui_pixel_top_bar(s_screen);
-    ui_pixel_wifi_bars_create(header, 12, 18, s_wifi_bars);
+    ui_pixel_wifi_bars_create(header, UI_STATUS_WIFI_X, 18, s_wifi_bars);
     auto *title = ui_pixel_label(header, "小智 AI", &buddy_font_16, UI_TEXT);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 42, 0);
-    s_battery = ui_pixel_battery_create(header, 206, 6, UI_TEXT, &lv_font_montserrat_14);
+    s_battery = ui_pixel_battery_create(header, UI_STATUS_BATTERY_X, 6, UI_TEXT, &lv_font_montserrat_14);
     refresh_status_bar();
 
     lv_obj_t *top_bar = lv_obj_create(s_screen);
@@ -186,20 +243,22 @@ void ui_init() {
     lv_obj_set_style_pad_ver(top_bar, 0, 0);
     lv_obj_clear_flag(top_bar, LV_OBJ_FLAG_SCROLLABLE);
 
+    // Mini face keeps the expression visible once the conversation hides the big one.
     s_status_badge = lv_obj_create(top_bar);
-    lv_obj_set_size(s_status_badge, 9, 9);
-    lv_obj_align(s_status_badge, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_set_style_radius(s_status_badge, 0, 0);
-    lv_obj_set_style_bg_color(s_status_badge, lv_color_hex(kAmberAccent), 0);
-    lv_obj_set_style_border_width(s_status_badge, 0, 0);
+    lv_obj_remove_style_all(s_status_badge);
+    lv_obj_set_size(s_status_badge, face::kMiniW, face::kMiniH);
+    lv_obj_align(s_status_badge, LV_ALIGN_LEFT_MID, 0, -1);
+    lv_obj_remove_flag(s_status_badge, LV_OBJ_FLAG_SCROLLABLE);
+    s_badge_color = kAmberAccent;
+    lv_obj_add_event_cb(s_status_badge, draw_badge, LV_EVENT_DRAW_MAIN, nullptr);
 
     s_status_label = lv_label_create(top_bar);
     lv_obj_set_style_text_font(s_status_label, &buddy_font_16, 0);
     lv_obj_set_style_text_color(s_status_label, lv_color_hex(kTextMain), 0);
     lv_label_set_long_mode(s_status_label, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_size(s_status_label, 196, 20);
+    lv_obj_set_size(s_status_label, 216 - face::kMiniW - 8, 20);
     lv_label_set_text(s_status_label, "准备中...");
-    lv_obj_align(s_status_label, LV_ALIGN_LEFT_MID, 15, 0);
+    lv_obj_align(s_status_label, LV_ALIGN_LEFT_MID, face::kMiniW + 8, 0);
 
     // Keep the conversation open and reserve the shared two-line key footer.
     s_msg_container = lv_obj_create(s_screen);
@@ -211,17 +270,19 @@ void ui_init() {
     lv_obj_set_style_border_width(s_msg_container, 0, 0);
     lv_obj_set_style_border_color(s_msg_container, lv_color_hex(UI_BORDER), 0);
     lv_obj_set_style_pad_all(s_msg_container, 0, 0);
-    lv_obj_set_style_pad_row(s_msg_container, 12, 0);
-    lv_obj_set_style_text_line_space(s_msg_container, 4, 0);
+    // Match the gap between labels to the gap between wrapped lines, so
+    // bottom-follow always leaves complete rows at the top and bottom.
+    lv_obj_set_style_pad_row(s_msg_container, kTextLineSpace, 0);
+    lv_obj_set_style_text_line_space(s_msg_container, kTextLineSpace, 0);
     lv_obj_set_flex_flow(s_msg_container, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(s_msg_container, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START);
     lv_obj_set_scroll_dir(s_msg_container, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(s_msg_container, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_add_event_cb(s_msg_container, draw_reading_fade, LV_EVENT_DRAW_POST, nullptr);
 
     s_user_text_label = lv_label_create(s_msg_container);
     lv_obj_set_width(s_user_text_label, 216);
+    lv_obj_set_height(s_user_text_label, LV_SIZE_CONTENT);
     lv_obj_set_style_text_font(s_user_text_label, &buddy_font_16, 0);
     lv_obj_set_style_text_color(s_user_text_label, lv_color_hex(kUserBlue), 0);
     lv_label_set_long_mode(s_user_text_label, LV_LABEL_LONG_WRAP);
@@ -231,6 +292,7 @@ void ui_init() {
 
     s_ai_text_label = lv_label_create(s_msg_container);
     lv_obj_set_width(s_ai_text_label, 216);
+    lv_obj_set_height(s_ai_text_label, LV_SIZE_CONTENT);
     lv_obj_set_style_text_font(s_ai_text_label, &buddy_font_16, 0);
     lv_obj_set_style_text_color(s_ai_text_label, lv_color_hex(kTextMain), 0);
     lv_label_set_long_mode(s_ai_text_label, LV_LABEL_LONG_WRAP);
@@ -239,8 +301,8 @@ void ui_init() {
 
     s_companion = lv_obj_create(s_screen);
     lv_obj_remove_style_all(s_companion);
-    lv_obj_set_pos(s_companion, 58, 88);
-    lv_obj_set_size(s_companion, 124, 112);
+    lv_obj_set_pos(s_companion, (240 - face::kBigW) / 2, 88);
+    lv_obj_set_size(s_companion, face::kBigW, face::kBigH);
     lv_obj_remove_flag(s_companion, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(s_companion, draw_companion, LV_EVENT_DRAW_MAIN, nullptr);
     show_companion(true);
@@ -250,6 +312,10 @@ void ui_init() {
     s_status_timer = lv_timer_create([](lv_timer_t *) {
         if (s_screen && app_registry_screen_is_on()) refresh_status_bar();
     }, 5000, nullptr);
+    s_face_animator = face::Animator{};
+    s_waveform.clear();
+    s_face_pose = s_face_animator.step(face_activity(s_face_state));
+    s_face_timer = lv_timer_create(face_tick, face::kFramePeriodMs, nullptr);
 
     bsp_lvgl_unlock();
 }
@@ -275,6 +341,10 @@ void ui_hide() {
         lv_timer_delete(s_status_timer);
         s_status_timer = nullptr;
     }
+    if (s_face_timer) {
+        lv_timer_delete(s_face_timer);
+        s_face_timer = nullptr;
+    }
     if (s_screen) {
         lv_obj_delete(s_screen);
         s_screen = nullptr;
@@ -295,8 +365,11 @@ void ui_hide() {
 
 void ui_set_state(State state) {
     if (!begin_update(200)) return;
+    if (s_face_state != state) s_waveform.clear();
     s_face_state = state;
-    if (s_companion) lv_obj_invalidate(s_companion);
+    conversation_layout();
+    scroll_to_bottom_locked();
+    if (s_companion) lv_obj_invalidate(s_companion);  // palette may change (error eyes)
     s_default_hint = state == State::Listening ? "确定结束 · 上下音量" :
                      state == State::Speaking || state == State::Thinking ?
                      "确定打断 · 上下音量" : "确定说话 · 上下音量";
@@ -307,7 +380,7 @@ void ui_set_state(State state) {
 
     switch (state) {
     case State::Disconnected:
-        lv_obj_set_style_bg_color(s_status_badge, lv_color_hex(kRedAccent), 0);
+        set_badge_color(kRedAccent);
         if (!WifiManager::GetInstance().IsConnected()) {
             lv_label_set_text(s_status_label, "Wi-Fi 未连接，请配网");
         } else {
@@ -315,31 +388,37 @@ void ui_set_state(State state) {
         }
         break;
     case State::Connecting:
-        lv_obj_set_style_bg_color(s_status_badge, lv_color_hex(kAmberAccent), 0);
+        set_badge_color(kAmberAccent);
         lv_label_set_text(s_status_label, "正在连接小智");
         break;
     case State::Idle:
-        lv_obj_set_style_bg_color(s_status_badge, lv_color_hex(kGreenAccent), 0);
+        set_badge_color(kGreenAccent);
         lv_label_set_text(s_status_label, "准备就绪");
         break;
     case State::Listening:
-        lv_obj_set_style_bg_color(s_status_badge, lv_color_hex(kUserBlue), 0);
+        set_badge_color(kUserBlue);
         lv_label_set_text(s_status_label, "正在聆听");
         break;
     case State::Thinking:
-        lv_obj_set_style_bg_color(s_status_badge, lv_color_hex(kAmberAccent), 0);
+        set_badge_color(kAmberAccent);
         lv_label_set_text(s_status_label, "正在思考");
         break;
     case State::Speaking:
-        lv_obj_set_style_bg_color(s_status_badge, lv_color_hex(kGreenAccent), 0);
+        set_badge_color(kGreenAccent);
         lv_label_set_text(s_status_label, "正在回复");
         break;
     case State::Error:
-        lv_obj_set_style_bg_color(s_status_badge, lv_color_hex(kRedAccent), 0);
+        set_badge_color(kRedAccent);
         lv_label_set_text(s_status_label, "服务异常 · 确定重试");
         break;
     }
 
+    bsp_lvgl_unlock();
+}
+
+void ui_set_emotion(const char *emotion) {
+    if (!begin_update(200)) return;
+    s_face_animator.set_mood(face::mood_from_emotion(emotion));
     bsp_lvgl_unlock();
 }
 
@@ -351,35 +430,36 @@ void ui_set_status_text(const std::string &text) {
 
 void ui_set_user_text(const std::string &text) {
     if (!begin_update(200)) return;
-    conversation_layout();
     lv_obj_remove_flag(s_user_text_label, LV_OBJ_FLAG_HIDDEN);
     s_user_text = "你说: ";
     passport::append_utf8_tail(s_user_text, passport::fold_display_text(text), kMaxTextBytes);
     lv_label_set_text(s_user_text_label, s_user_text.c_str());
+    conversation_layout();
     scroll_to_bottom_locked();
     bsp_lvgl_unlock();
 }
 
 void ui_set_ai_text(const std::string &text) {
     if (!begin_update(200)) return;
-    conversation_layout();
+    lv_obj_remove_flag(s_ai_text_label, LV_OBJ_FLAG_HIDDEN);
     const std::string folded = passport::fold_display_text(text);
     const auto tail = passport::utf8_tail(folded, kMaxTextBytes);
     s_ai_reply_buffer.assign(tail.data(), tail.size());
     std::string display = "小智: " + s_ai_reply_buffer;
     lv_label_set_text(s_ai_text_label, display.c_str());
+    conversation_layout();
     scroll_to_bottom_locked();
     bsp_lvgl_unlock();
 }
 
 void ui_append_ai_text(const std::string &text) {
     if (!begin_update(200)) return;
-    conversation_layout();
+    lv_obj_remove_flag(s_ai_text_label, LV_OBJ_FLAG_HIDDEN);
 
     passport::append_utf8_tail(s_ai_reply_buffer, passport::fold_display_text(text), kMaxTextBytes);
-
     std::string display = "小智: " + s_ai_reply_buffer;
     lv_label_set_text(s_ai_text_label, display.c_str());
+    conversation_layout();
     scroll_to_bottom_locked();
     bsp_lvgl_unlock();
 }
@@ -414,7 +494,10 @@ void ui_clear_text() {
     lv_label_set_text(s_user_text_label, s_user_text.c_str());
     lv_obj_add_flag(s_user_text_label, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(s_ai_text_label, "");
+    lv_obj_add_flag(s_ai_text_label, LV_OBJ_FLAG_HIDDEN);
+    s_text_expanded = false;
     show_companion(true);
+    lv_obj_scroll_to_y(s_msg_container, 0, LV_ANIM_OFF);
     bsp_lvgl_unlock();
 }
 

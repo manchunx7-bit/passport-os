@@ -1,6 +1,7 @@
 #include "launcher/launcher.h"
 #include "launcher/timer_resume.h"
 #include "launcher/app_registry.h"
+#include "launcher/ok_gesture.h"
 #include "boot_chime.h"
 #include "ui_sfx.h"
 #include "boot_splash.h"
@@ -19,6 +20,9 @@
 #include "bsp_i2c.h"
 #include "ui/ui_capture.h"
 #include "apps/pomodoro/app_pomodoro.h"
+#include "apps/reminders/reminder_service.h"
+#include "device_control.h"
+#include "apps/lists/list_service.h"
 #include "esp_log.h"
 #include "passport_muse.h"
 #include "esp_timer.h"
@@ -111,6 +115,14 @@ static void button_task(void *arg) {
     bool long_sent = false;
     uint8_t power_stage = 0;
     uint16_t last_mv = 0;
+    OkGesture ok_gesture;
+    const auto emit = [](uint8_t button, app_btn_event_t event, uint16_t mv) {
+        key_post({button, event, mv});
+    };
+    const auto gesture_post = [&](const KeyMessage &msg) {
+        ok_gesture.event(msg.button, msg.event, msg.mv, esp_timer_get_time(),
+                         app_registry_get_active(), emit);
+    };
 
     // A key still held from the power-on gesture is not input.
     for (int i = 0; i < 250 && bsp_button_read_mv() < 2500; ++i) vTaskDelay(pdMS_TO_TICKS(20));
@@ -142,7 +154,7 @@ static void button_task(void *arg) {
                     .event = BTN_EVT_PRESS,
                     .mv = last_mv
                 };
-                key_post(msg);
+                gesture_post(msg);
             } else if (previous >= 0) {
                 // 松开瞬间
                 if (!long_sent) {
@@ -151,21 +163,21 @@ static void button_task(void *arg) {
                         .event = BTN_EVT_CLICK,
                         .mv = last_mv
                     };
-                    key_post(msg_click);
+                    gesture_post(msg_click);
                 } else {
                     KeyMessage msg_up = {
                         .button = static_cast<uint8_t>(previous),
                         .event = BTN_EVT_LONG_UP,
                         .mv = last_mv
                     };
-                    key_post(msg_up);
+                    gesture_post(msg_up);
                 }
                 KeyMessage msg_rel = {
                     .button = static_cast<uint8_t>(previous),
                     .event = BTN_EVT_RELEASE,
                     .mv = last_mv
                 };
-                key_post(msg_rel);
+                gesture_post(msg_rel);
                 if (power_stage) key_post({kPowerCommand, BTN_EVT_CLICK, 0});
             }
             power_stage = 0;
@@ -190,9 +202,11 @@ static void button_task(void *arg) {
                 .event = BTN_EVT_LONG,
                 .mv = last_mv
             };
-            key_post(msg_long);
+            gesture_post(msg_long);
             long_sent = true;
         }
+
+        ok_gesture.poll(esp_timer_get_time(), app_registry_get_active(), emit);
 
         // Keep short taps detectable while the panel is off: three 50 ms
         // samples would otherwise miss a normal 80-100 ms waking press.
@@ -204,16 +218,27 @@ static void input_task(void *arg) {
     (void)arg;
     KeyMessage msg;
     while (true) {
-        if (xQueueReceive(s_key_queue, &msg, pdMS_TO_TICKS(100)) == pdTRUE) {
+        // Keys and serial commands arrive through the queue and wake this task at
+        // once. The timeout only paces the polls below: use 20 ms while Xiaozhi or
+        // a voice/cooperative switch is active so MCP handovers do not wait on a
+        // 100 ms tick, 100 ms for normal foreground, and 500 ms while asleep/idle.
+        const bool fast = app_registry_switch_pending() || device_control::pending() ||
+                          (app_registry_get_active() == APP_ID_XIAOZHI && !app_registry_background_idle());
+        const bool prompt = fast || !app_registry_background_idle() || reminders::alarm_active();
+        if (xQueueReceive(s_key_queue, &msg, pdMS_TO_TICKS(fast ? 20 : prompt ? 100 : 500)) == pdTRUE) {
             dispatch_input_message(msg);
         }
+        device_control::poll();
         app_registry_process_pending_switch();
+        reminders::poll();
+        settings_tick();
     }
 }
 
 static void system_monitor_task(void *arg) {
     (void)arg;
     unsigned battery_tick = 0;
+    bool scan_idle_applied = false;
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(1000));
         bsp_memory_sample();
@@ -223,7 +248,13 @@ static void system_monitor_task(void *arg) {
             if (power_battery_tick()) key_post_wait({kPowerCommand, BTN_EVT_CLICK, 3});
         }
         wifi_setup_tick();
-        settings_tick();
+
+        const bool scan_idle = app_registry_background_idle();
+        if (scan_idle != scan_idle_applied) {
+            scan_idle_applied = scan_idle;
+            WifiManager::GetInstance().SetScanIdle(scan_idle);
+        }
+
         app_registry_tick();
         pomodoro_service_tick();
         if (app_registry_get_active() == APP_ID_LAUNCHER && app_registry_screen_is_on()) {
@@ -235,6 +266,11 @@ static void system_monitor_task(void *arg) {
 }
 
 static void handle_serial_command(int c) {
+    if (c == 'R') { app_registry_switch_to(APP_ID_REMINDERS); return; }
+    if (c == 'N') { app_registry_switch_to(APP_ID_NETEASE); return; }
+    // Diagnostic equivalent of the resolved physical double-click. It uses
+    // the same wake/lifecycle/one-shot conversation path, not a direct mic call.
+    if (c == 'x') { app_registry_dispatch_key(BSP_BTN_OK, BTN_EVT_DOUBLE, 600); return; }
     if (c == 'u' || c == 'U' || c == '+') {
         ESP_LOGI(TAG, "[SerialCmd] UP (+) button clicked");
         KeyMessage msg = {.button = BSP_BTN_UP, .event = BTN_EVT_CLICK, .mv = 15};
@@ -317,14 +353,17 @@ static void handle_serial_command(int c) {
 static void serial_cmd_task(void *arg) {
     (void)arg;
     while (true) {
-        int c = fgetc(stdin);
-        if (c != EOF && c > 0) {
+        int c;
+        while ((c = fgetc(stdin)) != EOF) {
+            if (c <= 0) continue;
             // A single FIFO orders physical keys and diagnostic commands.
             KeyMessage msg = {.button = kSerialCommand, .event = BTN_EVT_CLICK,
                               .mv = static_cast<uint16_t>(c)};
             key_post_wait(msg);
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        // The console is non-blocking: every poll is a wake-up. Drain the buffer
+        // above, then poll at 4 Hz while the screen is off and nothing streams.
+        vTaskDelay(pdMS_TO_TICKS(app_registry_background_idle() ? 250 : 50));
     }
 }
 
@@ -363,6 +402,8 @@ extern "C" void app_main(void) {
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+    reminders::initialize();
+    lists::initialize();
 
     // 头像/名片分区在后台挂载;残留其他固件时在此格式化(十余秒),
     // 不让手机上传请求承担这段耗时。堆此时最完整,SPIFFS 缓冲也放在低地址。

@@ -54,8 +54,15 @@ lv_obj_t *ui_pixel_hint_pill(lv_obj_t *parent, const char *text,
 // 对齐即垂直居中。
 lv_obj_t *ui_pixel_top_bar(lv_obj_t *parent);
 
-// Battery text starts at x=160; keep other status content before x=156.
-enum { UI_STATUS_CONTENT_RIGHT = 156, UI_STATUS_BATTERY_LEFT = 160 };
+// The panel sits behind rounded glass corners: keep Wi-Fi and battery 18 px
+// from the edges instead of 12 so they are not clipped.
+// Battery text starts at x=154; keep other status content before x=150.
+enum {
+    UI_STATUS_WIFI_X = 18,
+    UI_STATUS_BATTERY_X = 200,
+    UI_STATUS_CONTENT_RIGHT = 150,
+    UI_STATUS_BATTERY_LEFT = 154,
+};
 void ui_pixel_status_text_align(lv_obj_t *label, int x, int width,
                                 lv_text_align_t align);
 

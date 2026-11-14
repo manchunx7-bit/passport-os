@@ -118,6 +118,9 @@ public:
     // Key press / app open while offline: rescan without waiting for backoff.
     void ScanNow();
 
+    // Screen off with no streaming app: offline scans back off to 5 minutes.
+    void SetScanIdle(bool idle);
+
     // ==================== Event ====================
     
     void SetEventCallback(std::function<void(WifiEvent, const std::string&)> callback);
@@ -153,6 +156,7 @@ private:
     // 期望省电档:station 未运行时 SetPowerSaveLevel 只记这里,StartStation 重放。
     // 默认 BALANCED 等价 IDF 默认 MIN_MODEM,保持历史行为。
     WifiPowerSaveLevel desired_ps_level_ = WifiPowerSaveLevel::BALANCED;
+    bool scan_idle_ = false;  // replayed by StartStation like desired_ps_level_
 
     std::function<void(WifiEvent, const std::string&)> event_callback_;
     mutable std::string mac_address_;

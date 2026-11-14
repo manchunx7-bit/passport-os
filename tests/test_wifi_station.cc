@@ -85,6 +85,17 @@ int main() {
   assert(!station.timer_handle_->active&&station.scan_current_interval_microseconds_==10*1000*1000);
   station.Stop();
  }
+ {
+  // Screen off, nothing streaming: offline scans wait 5 minutes, a key press
+  // still scans at once, and leaving idle restores the normal backoff.
+  WifiStation station;station.SetNetworkAllowed([](const std::string &){return false;});station.SetScanIntervalRange(10,60);station.Start();
+  station.SetScanIdle(true);scan(station,{});
+  assert(station.timer_handle_->delay==int64_t(WifiStation::kIdleScanIntervalSeconds)*1000*1000);
+  mock_now_us+=400*1000*1000;station.ScanNow();assert(station.timer_handle_->delay==100*1000);
+  station.timer_handle_->callback(station.timer_handle_->arg);
+  station.SetScanIdle(false);scan(station,{});assert(station.timer_handle_->delay==10*1000*1000);
+  station.Stop();
+ }
  assert(mock_timers==0);
  // Saved profiles survive a fresh station/SSID-manager instance. Unsorted dense
  // scans retain the strongest BSSID per SSID without a candidate per unknown AP.

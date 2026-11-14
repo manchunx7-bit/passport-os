@@ -44,6 +44,18 @@ void pomodoro_toggle(pomodoro_t *s, uint64_t now_us);
 bool pomodoro_select(pomodoro_t *s, int direction); /* Ready/finished only. */
 void pomodoro_reset(pomodoro_t *s); /* Current interval, keeps completed count. */
 
+typedef enum {
+    POMODORO_QUERY = 0, POMODORO_START, POMODORO_PAUSE,
+    POMODORO_RESUME, POMODORO_RESET
+} pomodoro_action_t;
+typedef enum {
+    POMODORO_COMMAND_OK = 0, POMODORO_COMMAND_CONFLICT, POMODORO_COMMAND_INVALID
+} pomodoro_command_result_t;
+/* Explicit commands are idempotent; START never overwrites a live interval.
+ * phase is used by START only. No dynamic allocation or new timer. */
+pomodoro_command_result_t pomodoro_command(pomodoro_t *s, pomodoro_action_t action,
+                                           uint8_t phase, uint64_t now_us);
+
 #ifdef __cplusplus
 }
 #endif

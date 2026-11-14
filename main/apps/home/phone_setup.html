@@ -4,103 +4,162 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light">
+<meta name="theme-color" content="#f2f3ee">
 <title>AI 护照 · 手机设置</title>
 <style>
-:root{--paper:#f6f5ef;--ink:#172e24;--muted:#56635a;--line:#d4d9cd;--green:#205c3f;--tint:#e7edde;--error:#a12c23;--radius:12px;color-scheme:light}
-*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;accent-color:var(--green)}
-::selection{background:#c5dec9;color:var(--ink)}:focus-visible{outline:3px solid #438259;outline-offset:3px}input,textarea{caret-color:var(--green)}[hidden]{display:none!important}
-.shell{max-width:540px;margin:auto;padding:24px 24px max(28px,env(safe-area-inset-bottom))}.brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:.04em;font-size:15px}.brand svg{width:30px;height:30px}.brand small{margin-left:auto;font-size:12px;color:var(--muted);font-weight:400;letter-spacing:0}
-.steps{display:flex;list-style:none;padding:0;margin:30px 0 32px;gap:8px}.steps li{flex:1;color:var(--muted);font-size:13px;border-top:2px solid var(--line);padding-top:9px}.steps li[aria-current=step]{border-color:var(--green);color:var(--green);font-weight:700}.steps li.done{border-color:#819d7e}
-h1{font-size:30px;line-height:1.3;letter-spacing:-.025em;font-weight:650;margin:0 0 12px;text-wrap:balance}h2{font-size:18px;line-height:1.4;margin:0}p{margin:0 0 24px}.intro,.help{color:var(--muted)}.intro{font-size:15px}.help{font-size:13px;margin:8px 0 0}.divider{height:1px;background:var(--line);margin:28px 0}.field{margin:22px 0}label,.field-title{display:block;font-size:14px;font-weight:600;margin-bottom:8px}.optional{font-size:12px;color:var(--muted);font-weight:400;margin-left:6px}
-input[type=text],input[type=password],select,textarea{width:100%;border:1px solid #9ca99b;border-radius:var(--radius);padding:13px 14px;min-height:50px;background:#fffef9;color:var(--ink);font:inherit;line-height:1.5}textarea{resize:vertical}input::placeholder,textarea::placeholder{color:#677268}select{text-overflow:ellipsis;padding-right:32px}button{font:inherit;cursor:pointer;touch-action:manipulation}button:disabled{cursor:wait;opacity:.6}.primary,.secondary{width:100%;min-height:52px;padding:12px 18px;border:0;border-radius:var(--radius);font-weight:600}.primary{background:var(--green);color:white}.primary:hover{background:#16482f}.secondary{background:var(--tint);color:var(--ink);margin-top:12px}.text-button{background:none;border:0;color:var(--green);padding:10px 0;text-decoration:underline;text-underline-offset:4px;min-height:44px;font-size:14px}.row{display:flex;align-items:center;justify-content:space-between;gap:12px}.row label{margin:0}.password{position:relative}.password input{padding-right:70px}.password button{position:absolute;right:8px;top:4px;min-width:52px;height:44px;color:var(--green);background:none;border:0;font-size:14px}.status{font-size:14px;line-height:1.6;margin:16px 0;overflow-wrap:anywhere}.status:empty{display:none}.status[data-error=true]{color:var(--error)}.note{padding:16px 0;border-top:1px solid var(--line);color:var(--muted);font-size:13px;margin-top:26px}.actions{margin-top:30px}.connection{display:flex;align-items:center;gap:8px;color:var(--green);font-size:14px;margin-bottom:24px;overflow-wrap:anywhere}.connection svg{width:18px;height:18px;flex:none}.connection span{min-width:0;overflow-wrap:anywhere}
-details{border-top:1px solid var(--line);padding:20px 0}summary{cursor:pointer;font-size:16px;font-weight:600;min-height:30px}summary small{font-size:12px;font-weight:400;color:var(--muted);margin-left:6px}.detail-body{padding-top:18px}.file-pick{display:block;padding:15px 16px;border:1px dashed #80977f;border-radius:var(--radius);font-size:14px;font-weight:400;cursor:pointer}.file-pick input{display:block;width:100%;margin-top:12px;font-size:14px}input::file-selector-button{border:0;background:var(--tint);color:var(--ink);padding:8px 12px;border-radius:6px;margin-right:10px}.photo-tools{margin-top:18px}.crop-layout{display:flex;align-items:center;justify-content:center;gap:22px;flex-wrap:wrap}#vp{position:relative;width:192px;height:300px;overflow:hidden;background:#dde5d7;touch-action:none}#pv{position:absolute;pointer-events:none;user-select:none;max-width:none}#binc{width:96px;height:150px;background:#07170f;image-rendering:pixelated}.caption{text-align:center;font-size:12px;color:var(--muted);margin:8px 0 0}#zm{width:100%;min-height:40px}#sharec{display:block;width:180px;height:240px;margin:20px auto 0;background:white}.saved{font-size:13px;color:var(--muted);margin:8px 0 18px}.success-mark{width:60px;height:60px;color:var(--green);margin:6px 0 24px}.complete{padding-top:12px}.complete p{color:var(--muted)}.recap{margin:30px 0;padding:18px 0;border-block:1px solid var(--line);font-size:15px}.recap strong{display:block;font-size:20px;font-weight:600;overflow-wrap:anywhere}.subtle{font-size:12px;color:var(--muted);margin-top:30px;text-align:center}.empty-networks{margin:12px 0;color:var(--muted);font-size:13px}
-.file-pick label{font-weight:600;margin:0 0 10px}.file-pick input,.picker-help input{width:100%;min-height:48px;font-size:16px;cursor:pointer}input::file-selector-button{min-height:44px}.picker-help{padding:12px 0;margin-top:10px}.picker-help summary{font-size:14px;color:var(--green)}
-#museProxyHost,#museProxyPort{width:100%;min-height:50px;padding:13px 14px;border:1px solid #9ca99b;border-radius:var(--radius);background:#fffef9;color:var(--ink);font:inherit;line-height:1.5}#museSection label{margin-top:16px}
-@media(min-width:760px){.shell{margin:40px auto;padding:32px 40px;border:1px solid var(--line);border-radius:20px;background:#fbfaf5}.brand{margin-bottom:4px}h1{font-size:34px}}
-@media(max-width:360px){.shell{padding:20px 18px}h1{font-size:28px}.brand small{font-size:11px}.steps{margin-top:24px}.crop-layout{gap:12px}}
+:root{--bg:#f2f3ee;--card:#fff;--ink:#16241c;--muted:#6b756d;--line:#e3e6de;--field:#f6f7f3;--green:#1f5c3f;--green-dark:#16472f;--tint:#e6efe6;--error:#a12c23;--r:16px;--r-s:12px;color-scheme:light}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI","Microsoft YaHei",sans-serif;accent-color:var(--green);-webkit-font-smoothing:antialiased}
+::selection{background:#c5dec9}:focus-visible{outline:3px solid #4b8a62;outline-offset:2px}[hidden]{display:none!important}
+.vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.shell{max-width:480px;margin:auto;padding:max(18px,env(safe-area-inset-top)) 16px max(32px,env(safe-area-inset-bottom))}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650;font-size:15px;letter-spacing:.02em}.brand svg{width:28px;height:28px;flex:none;shape-rendering:crispEdges}
+.steps{display:flex;list-style:none;padding:0;margin:0 0 0 auto;gap:6px}.steps li{width:22px;height:6px;border-radius:3px;background:var(--line);font-size:0;overflow:hidden}.steps li.done{background:#9cb8a2}.steps li[aria-current=step]{width:34px;background:var(--green)}
+h1{font-size:28px;line-height:1.25;letter-spacing:-.02em;font-weight:700;margin:28px 0 6px;text-wrap:balance}h1:focus{outline:none}
+.intro{color:var(--muted);font-size:14px;margin:0 0 20px}
+p{margin:0}
+.card{background:var(--card);border-radius:var(--r);padding:16px;margin:12px 0;box-shadow:0 1px 0 rgba(22,36,28,.04)}
+.field+.field{margin-top:14px}
+label,.field-title{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+.optional{font-weight:400;margin-left:6px}
+input[type=text],input[type=password],input[type=number],input:not([type]),select,textarea{width:100%;min-height:48px;border:1px solid transparent;border-radius:var(--r-s);padding:12px 14px;background:var(--field);color:var(--ink);font:inherit;line-height:1.4;-webkit-appearance:none;appearance:none}
+input:focus,select:focus,textarea:focus{border-color:var(--green);background:#fff;outline:none}
+input::placeholder,textarea::placeholder{color:#9aa39b}textarea{resize:vertical}
+select{padding-right:40px;text-overflow:ellipsis;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b756d' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 16px center}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px}.row label{margin:0}
+.pair{display:grid;grid-template-columns:2fr 3fr;gap:8px}.pair.even{grid-template-columns:1fr 1fr}.pair.proxy{grid-template-columns:minmax(0,1fr) 88px}.pair.proxy input{min-width:0}.proxy-settings{padding-top:4px}.stack>*+*{margin-top:8px}
+button{font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}button:disabled{cursor:default;opacity:.55}
+.primary,.secondary{display:block;width:100%;min-height:52px;padding:12px 18px;border:0;border-radius:var(--r-s);font-weight:600;font-size:16px}
+.primary{background:var(--green);color:#fff}.primary:active{background:var(--green-dark)}
+.secondary{background:var(--tint);color:var(--green)}.secondary+.secondary,.primary+.secondary{margin-top:10px}
+.text-button{background:none;border:0;color:var(--green);padding:8px 0;min-height:40px;font-size:14px;font-weight:500}
+.center{display:block;margin:6px auto 0}
+.password{position:relative}.password input{padding-right:64px}.password button{position:absolute;right:4px;top:4px;height:40px;min-width:54px;border:0;background:none;color:var(--green);font-size:14px}
+.help{color:var(--muted);font-size:12.5px;margin-top:6px}.help:empty{display:none}
+.status{font-size:13.5px;margin:12px 2px;overflow-wrap:anywhere}.status:empty{display:none}.status[data-error=true]{color:var(--error)}
+.actions{margin-top:20px}
+.note{text-align:center;color:var(--muted);font-size:12px;margin-top:22px}
+.connection{display:inline-flex;align-items:center;gap:6px;background:var(--tint);color:var(--green);font-size:13px;font-weight:500;border-radius:999px;padding:5px 12px 5px 8px;margin:0 0 10px;max-width:100%}.connection svg{width:16px;height:16px;flex:none}.connection span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.group{background:var(--card);border-radius:var(--r);margin:12px 0;overflow:hidden}
+.group>details+details{border-top:1px solid var(--line)}
+details>summary{list-style:none;cursor:pointer}details>summary::-webkit-details-marker{display:none}
+.group>details>summary{display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 16px;font-weight:600;font-size:15.5px}
+.group>details>summary small{margin-left:auto;font-size:12.5px;font-weight:400;color:var(--muted);white-space:nowrap}
+.group>details>summary::after{content:"";width:7px;height:7px;border-right:2px solid #a3aba4;border-bottom:2px solid #a3aba4;transform:rotate(-45deg);margin:0 2px 0 4px;flex:none;transition:transform .15s}
+.group>details[open]>summary::after{transform:rotate(45deg)}
+.ico{width:32px;height:32px;border-radius:9px;background:var(--tint);color:var(--green);display:grid;place-items:center;flex:none}.ico svg{width:19px;height:19px}
+.detail-body{padding:0 16px 18px}.detail-body>*+*{margin-top:12px}
+.sub>summary{font-size:13.5px;color:var(--green);font-weight:500;padding:4px 0}.sub .detail-body{padding:10px 0 0}
+.download-link{display:block;min-height:48px;padding:12px;border-radius:var(--r-s);background:var(--green);color:#fff;text-align:center;text-decoration:none;font-weight:600}.download-link.secondary-link{background:var(--tint);color:var(--green);font-size:14px}
+a{color:var(--green)}
+.file-pick{display:block;padding:14px;border:1.5px dashed #b9c6b9;border-radius:var(--r-s);background:var(--field)}.file-pick label{color:var(--ink);margin:0 0 8px}
+.file-pick input,.sub input[type=file]{display:block;width:100%;min-height:44px;font-size:14px;cursor:pointer}
+input::file-selector-button{min-height:40px;border:0;background:var(--green);color:#fff;padding:8px 14px;border-radius:9px;margin-right:10px;font:inherit;font-size:14px}
+.portrait-presets{border:0;padding:0;margin:0;min-width:0}.portrait-presets legend{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;padding:0}
+.portrait-segments{display:grid;grid-template-columns:1fr 1fr 1.6fr;gap:4px;padding:4px;background:var(--field);border-radius:var(--r-s)}.portrait-segments label{position:relative;margin:0;min-width:0;cursor:pointer;color:var(--ink);font-weight:500}.portrait-segments input{position:absolute;opacity:0;width:1px;height:1px}.portrait-segments span{display:flex;align-items:center;justify-content:center;min-height:40px;padding:4px;font-size:13px;text-align:center;border-radius:9px}.portrait-segments input:checked+span{color:#fff;background:var(--green)}.portrait-segments input:focus-visible+span{outline:3px solid #4b8a62}
+.crop-layout{display:flex;align-items:flex-end;justify-content:center;gap:16px;margin-top:14px}#vp{position:relative;width:192px;height:300px;overflow:hidden;border-radius:10px;background:#dde5d7;touch-action:none}#pv{position:absolute;pointer-events:none;user-select:none;max-width:none}#binc{width:96px;height:150px;border-radius:6px;background:#07170f;image-rendering:pixelated}
+.caption{display:block;text-align:center;font-size:12px;color:var(--muted);font-weight:400;margin:6px 0 0}
+input[type=range]{width:100%;min-height:36px}.check{display:flex;align-items:center;gap:8px;color:var(--ink);font-weight:400;font-size:14px;margin:0}
+#sharec{display:block;width:150px;height:200px;margin:0 auto;border-radius:8px;background:#fff;border:1px solid var(--line)}
+.saved{font-size:12.5px;color:var(--muted)}
+.card-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}.card-thumb{width:54px;height:72px;object-fit:contain;background:var(--field);border-radius:6px;flex-shrink:0}.card-meta{flex:1;min-width:0}.card-meta p{margin:0 0 6px;font-size:13px;color:var(--muted)}.card-actions{display:flex;flex-wrap:wrap;gap:6px}.card-actions button{min-height:34px;padding:4px 10px;font-size:13px;border:0;border-radius:8px;background:var(--field);color:var(--ink)}.card-actions .remove{color:var(--error)}.card-empty{color:var(--muted);font-size:13px}
+.success-mark{width:64px;height:64px;color:var(--green);margin:40px 0 0}
+.recap strong{display:block;font-size:20px;font-weight:650;overflow-wrap:anywhere}.recap span{color:var(--muted);font-size:14px}
+@media(min-width:760px){.shell{padding-top:48px}}
 @media(prefers-reduced-motion:no-preference){.primary,.secondary{transition:background .15s ease-out}}
-.card-row{display:flex;align-items:center;gap:14px;padding:16px 0;border-bottom:1px solid var(--line)}.card-thumb{width:72px;height:96px;object-fit:contain;background:#fff;flex-shrink:0}.card-meta{flex:1;min-width:0}.card-meta p{margin:0 0 8px;font-size:14px}.card-actions{display:flex;flex-wrap:wrap;gap:8px}.card-actions button{min-height:44px;padding:8px 10px;font-size:13px;border:1px solid var(--line);border-radius:6px;background:var(--tint);color:var(--ink);cursor:pointer}.card-actions button:disabled{opacity:.45;cursor:default}.card-actions .remove{color:#923522;background:transparent}.card-actions button:focus-visible{outline:2px solid var(--green);outline-offset:2px}.card-empty{padding:12px 0;color:var(--muted);font-size:14px}</style>
-<style>
-.portrait-presets{border:0;padding:0;margin:0 0 22px;min-width:0}.portrait-presets legend{font-size:14px;font-weight:600;margin-bottom:8px}.portrait-segments{display:grid;grid-template-columns:1fr 1fr 2fr;gap:4px;padding:4px;background:var(--tint);border-radius:8px}.portrait-segments label{position:relative;margin:0;min-width:0;cursor:pointer}.portrait-segments input{position:absolute;opacity:0;width:1px;height:1px}.portrait-segments span{display:flex;align-items:center;justify-content:center;min-height:44px;padding:6px 4px;font-size:12px;text-align:center;border-radius:5px;line-height:1.4;overflow-wrap:anywhere}.portrait-segments input:checked+span{color:#fff;background:var(--green)}.portrait-segments input:focus-visible+span{outline:3px solid #438259;outline-offset:2px}
 </style>
 </head>
 <body><main class="shell">
-<header class="brand"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="4" y="2" width="24" height="28" rx="3" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="13" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M9 13h14M16 6c-4 4-4 10 0 14 4-4 4-10 0-14ZM11 25h10" stroke="currentColor" stroke-width="1.5"/></svg>AI 护照<small>手机设置</small></header>
-<ol class="steps" aria-label="设置进度"><li id="progress1" aria-current="step">1 连接网络</li><li id="progress2">2 个人资料</li><li id="progress3">3 完成</li></ol>
+<header class="brand"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="#1f5c3f" d="M3 1h10v1h1v12h-1v1H3v-1H2V2h1z"/><path fill="#e6efe6" d="M5 4h6v1h1v4h-1v1H5V9H4V5h1z"/><path fill="#1f5c3f" d="M6 6h1v1H6zm3 0h1v1H9zM5 12h6v1H5z"/></svg>AI 护照
+<ol class="steps" aria-label="设置进度"><li id="progress1" aria-current="step">1 连接网络</li><li id="progress2">2 个人资料</li><li id="progress3">3 完成</li></ol></header>
 
 <section id="step1" aria-labelledby="title1">
-<h1 id="title1" tabindex="-1">先让 AI 护照<br>连上网络。</h1>
-<p class="intro">仅支持 2.4 GHz Wi-Fi。iPhone 热点请打开“最大兼容性”。连接后继续填写个人资料；下次开机会自动连接。</p>
-<div class="field"><div class="row"><label for="network">附近的 Wi-Fi</label><button class="text-button" id="refresh" type="button">刷新列表</button></div>
+<h1 id="title1" tabindex="-1">连接 Wi-Fi</h1>
+<p class="intro">仅支持 2.4 GHz · iPhone 热点请开启“最大兼容性”</p>
+<div class="card">
+<div class="field"><div class="row"><label for="network">网络</label><button class="text-button" id="refresh" type="button">刷新列表</button></div>
 <select id="network"><option value="">正在寻找网络…</option></select><p id="scanStatus" class="help" role="status" aria-live="polite">正在扫描附近的 2.4 GHz Wi-Fi…</p></div>
-<button class="text-button" id="manualToggle" type="button" aria-expanded="false">找不到网络？手动输入</button>
-<div class="field" id="manualField" hidden><label for="ssid">Wi-Fi 名称</label><input id="ssid" type="text" autocapitalize="off" spellcheck="false" autocomplete="off" placeholder="完整输入网络名称"></div>
-<div class="field"><label for="password">Wi-Fi 密码</label><div class="password"><input id="password" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" maxlength="64" placeholder="请输入密码"><button id="showPassword" type="button" aria-label="显示 Wi-Fi 密码">显示</button></div><p class="help" id="passwordHelp">密码中的空格会原样保留。</p></div>
-<div id="networkStatus" class="status" role="status" aria-live="polite">正在读取设备状态…</div>
+<div class="field" id="manualField" hidden><label for="ssid">网络名称</label><input id="ssid" type="text" autocapitalize="off" spellcheck="false" autocomplete="off" placeholder="完整输入 Wi-Fi 名称"></div>
+<div class="field"><label for="password">密码</label><div class="password"><input id="password" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" maxlength="64" placeholder="Wi-Fi 密码"><button id="showPassword" type="button" aria-label="显示 Wi-Fi 密码">显示</button></div><p class="help" id="passwordHelp"></p></div>
 <div class="field" id="savedField" hidden><label for="savedNetwork">已保存的 Wi-Fi</label><select id="savedNetwork"><option value="">自动选择附近已保存的网络</option></select></div>
-<div class="actions"><button id="connect" class="primary" type="button" disabled>连接并继续</button><button id="reuse" class="secondary" type="button" hidden>连接已保存的 Wi-Fi</button><button id="keepSaved" class="text-button" type="button" hidden>暂不联网，只修改个人资料</button></div>
-<p class="note">请保持手机连接设备热点。若手机提示“无互联网”，选择继续使用此网络。整个页面无需联网加载。</p>
+</div>
+<button class="text-button" id="manualToggle" type="button" aria-expanded="false">找不到网络？手动输入</button>
+<div id="networkStatus" class="status" role="status" aria-live="polite">正在读取设备状态…</div>
+<div class="actions"><button id="connect" class="primary" type="button" disabled>连接并继续</button><button id="reuse" class="secondary" type="button" hidden>连接已保存的 Wi-Fi</button><button id="keepSaved" class="text-button center" type="button" hidden>暂不联网，只修改资料</button></div>
+<p class="note">手机提示“无互联网”时，选择继续使用此网络</p>
 </section>
 
 <section id="step2" aria-labelledby="title2" hidden>
-<h1 id="title2" tabindex="-1">把它设成<br>你的 AI 护照。</h1>
-<p class="intro">填写你想展示的信息。以下均可选，以后也能从设备的“手机设置”中修改。</p>
-<details id="voiceSection"><summary>AI 随身语音<small>电脑语音输入</small></summary><div class="detail-body">
-<p class="help">设备与电脑连接同一 Wi-Fi。下载电脑端完整包，安装虚拟声卡和微信输入法（也可用其他支持快捷键的语音输入法），再启动语音转发器。</p>
-<p class="help">电脑输入设备选 CABLE Output；转发器输出选 CABLE Input。输入法快捷键与转发器保持一致。设备上键按住说话、松开结束，下键发送回车。</p>
-<p class="help"><a href="https://github.com/manchunx7-bit/folo-ai-passport-voice" target="_blank" rel="noopener noreferrer">AI 随身语音项目、下载与完整教程</a></p>
-<p class="help">设置页可以离线使用。打开 GitHub 教程前，先完成设置并将手机切回能上网的网络；以后可从设备“设置 → 手机设置”再次查看入口。</p>
-</div></details>
-<div class="connection"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.6"/><path d="m6 10 3 3 5-6" stroke="currentColor" stroke-width="1.6"/></svg><span id="connectionSummary">网络已就绪</span></div>
-<div class="field"><label for="name">名字<span class="optional">显示在设备首页</span></label><input id="name" type="text" maxlength="9" autocomplete="nickname" placeholder="你希望被怎样称呼"></div>
-<div class="field"><label for="sig">个性签名</label><input id="sig" type="text" maxlength="30" placeholder="用一句话介绍自己"></div>
-<div class="field"><label for="address">地址<span class="optional">可填写工作室或联系地址</span></label><textarea id="address" rows="2" maxlength="40" autocomplete="street-address" placeholder="按需填写，留空也可以"></textarea><p class="help">地址保存在设备资料中，不会自动改写名片图片。</p></div>
-<div class="field"><label for="province">天气与收音机城市</label><button id="locate" type="button" class="secondary" data-helper="" aria-describedby="locationHelp">使用手机当前位置</button><p id="locationHelp" class="help">允许定位后自动匹配附近城市，核对后再保存。手动选择也可以。</p><p id="locationStatus" class="status" role="status" aria-live="polite"></p><details id="locationFallback" hidden><summary>定位结果没有自动返回？</summary><div class="detail-body"><label for="locationCode">粘贴定位页的结果</label><input id="locationCode" type="text" maxlength="100" autocomplete="off" spellcheck="false" placeholder="PPOS:纬度,经度,精度"><button id="importLocation" class="secondary" type="button">使用这个位置</button><p class="help">打开定位页需要联网；返回这里时，请重新连接设备热点。</p></div></details><select id="province" aria-label="筛选省份"><option value="">全部省份</option></select><label for="citySearch" class="help">搜索城市或区县</label><input id="citySearch" type="text" maxlength="30" placeholder="例如：珠海、香洲" autocomplete="off"><label for="city" class="help">选择城市</label><select id="city"><option value="">暂不设置城市</option></select><p id="cityStatus" class="help" role="status" aria-live="polite">正在读取设备内的离线城市目录…</p><p class="help">天气使用所选地点；收音机优先查找当地台，数量不足时补充省内台和推荐台。</p></div>
-<div id="customCityFields" hidden><div class="field"><label for="customCity">自定义城市或区县名称</label><input id="customCity" type="text" maxlength="15" placeholder="填写所在城市"><label for="customRegion" class="help">所在省份</label><select id="customRegion"><option value="">暂不设置省份</option></select><label for="customRadioCity" class="help">收音机城市<span class="optional">区县可填写所属地级市</span></label><input id="customRadioCity" type="text" maxlength="15" placeholder="留空使用上面的城市名称"><label for="customLat" class="help">纬度</label><input id="customLat" type="text" inputmode="decimal" maxlength="15" placeholder="例如 22.2707"><label for="customLon" class="help">经度</label><input id="customLon" type="text" inputmode="decimal" maxlength="15" placeholder="例如 113.5767"><p class="help">目录中没有你的城市或名称已变更？可填写地图中的经纬度；两项都留空时只设置收音机城市。</p></div></div>
+<h1 id="title2" tabindex="-1">个人资料</h1>
+<div class="connection"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.8"/><path d="m6 10 3 3 5-6" stroke="currentColor" stroke-width="1.8"/></svg><span id="connectionSummary">网络已就绪</span></div>
+<p class="intro">以下均可选填，以后也能修改</p>
+<div class="card">
+<div class="field"><label for="name">名字</label><input id="name" type="text" maxlength="9" autocomplete="nickname" placeholder="显示在首页"></div>
+<div class="field"><label for="sig">签名</label><input id="sig" type="text" maxlength="30" placeholder="一句话介绍自己"></div>
+</div>
+<div class="card">
+<div class="field"><label for="city">城市<span class="optional">用于天气和收音机</span></label>
+<div class="stack"><button id="locate" type="button" class="secondary" data-helper="" aria-describedby="locationHelp">使用手机当前位置</button><p id="locationHelp" class="vh">允许定位后自动匹配附近城市</p><p id="locationStatus" class="status" role="status" aria-live="polite"></p>
+<details id="locationFallback" class="sub" hidden><summary>定位结果没有返回？</summary><div class="detail-body"><label for="locationCode">粘贴定位结果</label><input id="locationCode" type="text" maxlength="100" autocomplete="off" spellcheck="false" placeholder="PPOS:纬度,经度,精度"><button id="importLocation" class="secondary" type="button">使用这个位置</button></div></details>
+<div class="pair"><select id="province" aria-label="筛选省份"><option value="">全部省份</option></select><input id="citySearch" type="text" maxlength="30" placeholder="搜索城市" autocomplete="off" aria-label="搜索城市或区县"></div>
+<select id="city"><option value="">暂不设置城市</option></select></div>
+<p id="cityStatus" class="help" role="status" aria-live="polite">正在读取城市目录…</p></div>
+<div id="customCityFields" hidden><div class="field stack"><input id="customCity" type="text" maxlength="15" placeholder="城市或区县名称" aria-label="自定义城市或区县名称"><select id="customRegion" aria-label="所在省份"><option value="">暂不设置省份</option></select><input id="customRadioCity" type="text" maxlength="15" placeholder="收音机城市（留空同上）" aria-label="收音机城市"><div class="pair even"><input id="customLat" type="text" inputmode="decimal" maxlength="15" placeholder="纬度" aria-label="纬度"><input id="customLon" type="text" inputmode="decimal" maxlength="15" placeholder="经度" aria-label="经度"></div><p class="help">经纬度可从地图获取，留空则只设置收音机城市</p></div></div>
 <button id="retryCities" type="button" class="text-button" hidden>重新加载城市</button>
-<details id="portraitSection"><summary>首页人像<small id="avatarState">可稍后上传</small></summary><div class="detail-body">
+</div>
+
+<div class="group">
+<details id="portraitSection"><summary><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.5 4.2-7 8-7s7 2.5 8 7"/></svg></span>首页人像<small id="avatarState">可稍后上传</small></summary><div class="detail-body">
 <div class="file-pick"><label for="file">选择一张清晰的人像</label><input type="file" id="file" name="portrait" accept="image/*" aria-describedby="avatarPickerHelp"></div>
-<details class="picker-help"><summary>选图没有反应？从文件选择</summary><div class="detail-body"><label for="fileFallback">从文件选择人像图片</label><input type="file" id="fileFallback" name="portraitFile" aria-describedby="avatarPickerHelp"><p id="avatarPickerHelp" class="help">备用入口使用文件选择器。请选 JPEG 或 PNG 图片；若图片只在相册中，先保存到“文件”。如果两个入口都打不开，保持连接设备热点，在系统 Safari／Chrome 地址栏输入 http://192.168.4.1；也可用电脑连接热点后上传。</p></div></details>
+<details class="sub picker-help"><summary>选图没有反应？</summary><div class="detail-body"><label for="fileFallback">从文件选择</label><input type="file" id="fileFallback" name="portraitFile" aria-describedby="avatarPickerHelp"><p id="avatarPickerHelp" class="help">支持 JPEG、PNG。仍打不开时，用系统浏览器访问 192.168.4.1</p></div></details>
 <div id="photoTools" class="photo-tools" hidden>
-<fieldset class="portrait-presets"><legend>人像风格</legend><div class="portrait-segments">
+<fieldset class="portrait-presets"><legend>风格</legend><div class="portrait-segments">
 <label><input type="radio" name="portraitPreset" id="portraitPresetDot" value="1"><span>点阵</span></label>
 <label><input type="radio" name="portraitPreset" id="portraitPresetFlat" value="2"><span>平涂</span></label>
-<label><input type="radio" name="portraitPreset" id="portraitPresetHybrid" value="3" checked><span>平涂＋局部点阵</span></label>
+<label><input type="radio" name="portraitPreset" id="portraitPresetHybrid" value="3" checked><span>平涂＋点阵</span></label>
 </div></fieldset>
-<div class="crop-layout"><div id="vp" style="height:276px"><img id="pv" alt="人像取景预览"></div><div><canvas id="binc" width="96" height="138" style="height:138px" aria-label="设备人像预览"></canvas><p class="caption">设备效果</p></div></div><label for="zm" class="caption">缩放人像</label><input type="range" id="zm" min="100" max="400" value="100"><label for="portraitBrightness" class="caption">明暗</label><input type="range" id="portraitBrightness" min="-48" max="48" value="0" style="width:100%;min-height:40px"><label><input type="checkbox" id="portraitBackground"> 去除纯色背景</label></div>
+<div class="crop-layout"><div id="vp" style="height:276px"><img id="pv" alt="人像取景预览"></div><div><canvas id="binc" width="96" height="138" style="height:138px" aria-label="设备人像预览"></canvas><p class="caption">设备效果</p></div></div>
+<label for="zm" class="caption">缩放</label><input type="range" id="zm" min="100" max="400" value="100"><label for="portraitBrightness" class="caption">明暗</label><input type="range" id="portraitBrightness" min="-48" max="48" value="0">
+<label class="check"><input type="checkbox" id="portraitBackground"> 去除纯色背景</label></div>
 <p id="avatarStatus" class="status" role="status"></p></div></details>
-<details id="cardSection"><summary>彩色随身名片<small id="shareState">最多 6 张</small></summary><div class="detail-body">
-<p class="help">最多保存 6 张名片或二维码。首页按上键打开，上下键翻页，确定返回。推荐 3:4 比例，二维码周围请保留白边。</p>
-<div class="file-pick"><label for="shareFile" id="sharePickLabel">一次添加多张图片（最多 6 张）</label><input type="file" id="shareFile" name="card" multiple aria-describedby="shareBatchHelp"><p id="shareBatchHelp" class="help">在文件选择器中长按一张图片进入多选，再勾选其它图片并确认。可选择 JPEG、PNG 或 WebP 图片。</p></div>
-<details class="picker-help"><summary>改用相册选择</summary><div class="detail-body"><label for="shareFileFallback">从相册添加多张图片</label><input type="file" id="shareFileFallback" name="cardPhotos" accept="image/*" multiple aria-describedby="sharePickerHelp"><p id="sharePickerHelp" class="help">如果相册只能单选，请使用上面的文件多选入口；可先把图片保存到手机“文件”。在系统浏览器地址栏输入 http://192.168.4.1 打开设置页，可避免部分内置浏览器的限制。</p></div></details><input type="file" id="shareReplace" name="cardReplacement" hidden aria-hidden="true">
-<p id="shareStatus" class="status" role="status" aria-live="polite"></p><p class="help">选图后会逐张缩放至 240 × 320 并压缩；每张最多 24 KB，6 张最多 144 KB。替换、移除和排序在“完成设置”时保存。</p><p id="cardUsage" class="saved" role="status"></p><div id="cardList" aria-label="名片图片列表"></div><canvas id="sharec" width="240" height="320" aria-label="彩色名片预览" hidden></canvas></div></details>
-<details id="museSection"><summary>Muse 语音助手<small id="museState">可选配置</small></summary><div class="detail-body">
-<p class="help">需要自己的 Muse 账号、手机 App 和 Gadget SDK Token。保存后，在设备应用中打开 Muse，再用手机 Muse 的“设置 → 设备 → 开发者模式 → 添加设备”配对。配对时选择设备当前连接的 Wi-Fi。</p>
-<p class="help">SDK Token 可在 Muse 官方设备接入网站 gadgets.muse.ai 申请。建议在连接设备热点前准备好。</p>
-<p class="help"><a href="https://github.com/manchunx7-bit/ai-passport-muse" target="_blank" rel="noopener noreferrer">Muse 项目与完整配置教程</a> · 需要联网查看。Muse 不需要虚拟声卡或微信输入法。</p>
+
+<details id="cardSection"><summary><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.6 1.7-2.4 3-2.4s2.4.8 3 2.4M14.5 10h3.5M14.5 13.5h3.5"/></svg></span>随身名片<small id="shareState">最多 6 张</small></summary><div class="detail-body">
+<p class="help">首页按上键查看 · 建议 3:4 比例</p>
+<div class="file-pick"><label for="shareFile" id="sharePickLabel">一次添加多张图片（最多 6 张）</label><input type="file" id="shareFile" name="card" multiple aria-describedby="shareBatchHelp"><p id="shareBatchHelp" class="help">长按图片可多选 · JPEG / PNG / WebP</p></div>
+<details class="sub picker-help"><summary>改用相册选择</summary><div class="detail-body"><label for="shareFileFallback">从相册添加</label><input type="file" id="shareFileFallback" name="cardPhotos" accept="image/*" multiple aria-describedby="sharePickerHelp"><p id="sharePickerHelp" class="help">相册只能单选时，请用上面的文件入口</p></div></details><input type="file" id="shareReplace" name="cardReplacement" hidden aria-hidden="true">
+<p id="shareStatus" class="status" role="status" aria-live="polite"></p><p id="cardUsage" class="saved" role="status"></p><div id="cardList" aria-label="名片图片列表"></div><canvas id="sharec" width="240" height="320" aria-label="彩色名片预览" hidden></canvas></div></details>
+
+<details id="voiceSection"><summary><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></span>电脑语音输入<small>Windows</small></summary><div class="detail-body">
+<p class="help">电脑打开链接去配置即可使用。</p>
+<button class="secondary" id="copyVoiceTutorial" type="button">复制教程链接</button>
+<input id="voiceTutorialLink" aria-label="教程链接" readonly hidden value="https://github.com/manchunx7-bit/passport-os">
+<p id="voiceCopyStatus" class="status" role="status" aria-live="polite"></p>
+</div></details>
+
+<details id="museSection"><summary><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5z"/><path d="M12 6.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" fill="currentColor" stroke="none"/></svg></span>Muse 助手<small id="museState">可选配置</small></summary><div class="detail-body">
+<p class="help">需要 Muse 账号和 SDK Token（在 gadgets.muse.ai 申请）。保存后，在手机 Muse 中添加设备。<a href="https://github.com/manchunx7-bit/ai-passport-muse" target="_blank" rel="noopener noreferrer">查看教程</a></p>
 <p id="museSaved" class="saved" role="status">正在读取设备中的 Muse 配置…</p>
-<label for="museToken">SDK Token</label><input id="museToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="63" placeholder="mgst_…" aria-describedby="museSaved" disabled>
-<label for="museProxyHost">电脑代理 IP（可选）</label><input id="museProxyHost" inputmode="decimal" autocomplete="off" maxlength="15" placeholder="例如 192.168.1.10">
-<label for="museProxyPort">代理端口</label><input id="museProxyPort" type="number" min="1" max="65535" inputmode="numeric" placeholder="例如 7897">
-<p class="help">电脑与设备需在同一局域网，代理需要允许局域网连接。使用电脑代理时，电脑和代理软件要保持运行。清空 IP 后保存可切回直连；不会解除已有配对。</p>
-<p class="help">仅使用自己的 Token，勿发送给他人。更换 Token 后需要重新配对。通过设备热点配置，页面不回显已保存的密钥。</p>
+<div><label for="museToken">SDK Token</label><input id="museToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="63" placeholder="mgst_…" aria-describedby="museSaved" disabled></div>
+<div class="proxy-settings"><p class="field-title">电脑代理（可选）</p><div class="pair proxy"><div><label for="museProxyHost">电脑 IP</label><input id="museProxyHost" inputmode="decimal" autocomplete="off" maxlength="15" placeholder="192.168.1.20" aria-label="电脑代理 IP"></div><div><label for="museProxyPort">端口</label><input id="museProxyPort" type="number" min="1" max="65535" inputmode="numeric" placeholder="7897" aria-label="代理端口"></div></div><p class="help">清空 IP 后保存即切回直连</p></div>
 <button id="useSavedMuse" type="button" class="secondary" hidden>使用已保存配置</button><button id="retryMuse" type="button" class="text-button" hidden>重新读取配置</button>
-<button id="saveMuse" type="button" class="secondary" disabled>保存 Muse 配置</button><p class="help">Token 和电脑代理设置保存在这台设备，重启后仍可使用。也可以点下方“保存并完成设置”一起保存。</p><p id="museStatus" class="status" role="status" aria-live="polite"></p></div></details>
+<button id="saveMuse" type="button" class="secondary" disabled>保存 Muse 配置</button><p id="museStatus" class="status" role="status" aria-live="polite"></p></div></details>
+</div>
+
 <div id="saveStatus" class="status" role="status" aria-live="polite"></div>
-<div class="actions"><button id="save" class="primary" type="button">保存并完成设置</button><button id="back" class="text-button" type="button">返回网络设置</button></div>
+<div class="actions"><button id="save" class="primary" type="button">保存并完成</button><button id="back" class="text-button center" type="button">返回网络设置</button></div>
 </section>
 
 <section id="step3" class="complete" aria-labelledby="title3" hidden>
-<svg class="success-mark" viewBox="0 0 64 64" fill="none" aria-hidden="true"><circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="2"/><path d="m19 32 9 9 18-20" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-<h1 id="title3" tabindex="-1">设置完成。<br>拿起你的 AI 护照吧。</h1>
-<p>设备即将关闭设置热点并进入首页。手机可以切回平时使用的 Wi-Fi。</p>
-<div class="recap"><strong id="doneName">AI 护照</strong><span id="doneSummary">资料已保存</span></div>
-<p class="help">以后修改：设备“设置 → 手机设置”，或在首页长按下键。</p>
+<svg class="success-mark" viewBox="0 0 64 64" fill="none" aria-hidden="true"><circle cx="32" cy="32" r="29" fill="#e6efe6"/><path d="m20 32 8 8 16-17" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<h1 id="title3" tabindex="-1">设置完成</h1>
+<div class="card recap"><strong id="doneName">AI 护照</strong><span id="doneSummary">资料已保存</span></div>
+<p class="intro">设备即将回到首页，手机可切回常用 Wi-Fi。<br>以后修改：设备“设置 → 手机设置”</p>
 </section>
-<footer class="subtle">你的设置直接保存到这台设备</footer>
 </main>
 <script>
 'use strict';
+// The page is served gzipped from flash; the per-window API token arrives as a cookie.
+if(!window.__T)window.__T=(document.cookie.match(/(?:^|;\s*)pt=(\d+)/)||[])[1]||'';
 const $=id=>document.getElementById(id);
 const say=(id,text,error=false)=>{const el=$(id);el.textContent=text;el.dataset.error=String(error)};
 const bytes=s=>new TextEncoder().encode(s).length;
@@ -190,7 +249,7 @@ async function scan(reset=true){
 }
 $('refresh').onclick=()=>scan();
 $('manualToggle').onclick=()=>{manual=!manual;$('manualField').hidden=!manual;$('manualToggle').setAttribute('aria-expanded',String(manual));$('manualToggle').textContent=manual?'返回附近的网络':'找不到网络？手动输入';$('network').disabled=manual;if(manual)$('ssid').focus()};
-$('network').onchange=()=>{const open=$('network').selectedOptions[0]?.dataset.secure==='false';$('passwordHelp').textContent=open?'这是开放网络，无需输入密码。':'密码中的空格会原样保留。';if(open)$('password').value=''};
+$('network').onchange=()=>{const open=$('network').selectedOptions[0]?.dataset.secure==='false';$('passwordHelp').textContent=open?'开放网络，无需密码':'';if(open)$('password').value=''};
 $('showPassword').onclick=()=>{const visible=$('password').type==='password';$('password').type=visible?'text':'password';$('showPassword').textContent=visible?'隐藏':'显示';$('showPassword').setAttribute('aria-label',visible?'隐藏 Wi-Fi 密码':'显示 Wi-Fi 密码')};
 async function poll(){polls++;try{const state=await api('/api/setup');if(state.finishing){step(3);return}if(state.state==='connected'){networkReady('已连接 '+state.ssid);return}if(state.state==='failed'){lockNetwork(false);say('networkStatus','连接未成功。请检查密码、路由器是否开启，以及是否为 2.4 GHz 网络，然后重试。',true);return}say('networkStatus','正在连接'+(state.ssid?' '+state.ssid:' Wi-Fi')+'，请保持连接设备热点。')}catch(e){say('networkStatus','连接过程中热点可能短暂断开。请重新连接设备热点，此页面会继续检查。',true)}if(polls<180)pollTimer=setTimeout(poll,1500);else{lockNetwork(false);say('networkStatus','暂时联系不到设备。请连接设备热点后刷新页面，查看连接结果。',true)}}
 async function connect(saved=false){const ssid=manual?$('ssid').value:$('network').value,password=$('password').value;if(!saved){if(!ssid||bytes(ssid)>32){say('networkStatus','请选择 Wi-Fi，或输入不超过 32 字节的网络名称。',true);return}const n=bytes(password);if(n!==0&&(n<8||n>63)&&!/^[0-9a-fA-F]{64}$/.test(password)){say('networkStatus','Wi-Fi 密码通常为 8–63 字节，请检查后重试。',true);return}}clearTimeout(pollTimer);polls=0;verified=false;lockNetwork(true);say('networkStatus','正在连接，稍后会自动进入个人资料。');try{await api('/api/connect',{...(saved?{saved:true,ssid:$('savedNetwork').value}:{ssid,password}),epoch:Math.floor(Date.now()/1000),tz_minutes:-new Date().getTimezoneOffset()});}catch(e){if(e.code&&e.code!=='busy'){lockNetwork(false);say('networkStatus',e.message,true);return}say('networkStatus','正在确认设备是否已收到请求，请保持热点连接。')}pollTimer=setTimeout(poll,1000)}
@@ -379,8 +438,20 @@ async function shareBlob(){
  }
  throw new Error('名片图片过于复杂，压缩后仍较大，请换一张图片。');
 }
-async function save(){if(imageLoading||cardBusy){say('saveStatus','图片还在读取，请稍等。',true);return}if(!verified&&!hasSaved){step(1);say('networkStatus','请先连接 Wi-Fi。',true);return}let selected;try{selected=selectedCityProfile()}catch(e){say('saveStatus',e.message,true);return}const profile={name:$('name').value,signature:$('sig').value,address:$('address').value,...selected};for(const [key,max] of [['name',31],['signature',95],['address',127],['city',47],['region',31],['radio_city',47],['lat',15],['lon',15]])if(bytes(profile[key])>max){say('saveStatus','有一项内容过长，请缩短后再保存。',true);return}$('save').disabled=true;$('back').disabled=true;try{renderCards();if(pendingMuseConfig()){say('saveStatus','正在保存 Muse 配置…');await saveMuseConfig(true)}say('saveStatus','正在保存个人资料…');await api('/api/profile',profile);if(portrait){say('saveStatus','正在保存人像…');await api('/api/avatar',portraitPacked())}await saveCards();say('saveStatus','正在完成设置…');await api('/api/finish',{});$('doneName').textContent=profile.name||'AI 护照';$('doneSummary').textContent='个人资料'+(portrait?'、人像':'')+(cards.length?'、'+cards.length+' 张彩色名片':'')+'已保存';step(3)}catch(e){say('saveStatus',e.message+' 尚未完成的内容可再次保存。',true)}finally{$('save').disabled=false;$('back').disabled=false;renderCards()}}
+async function save(){if(imageLoading||cardBusy){say('saveStatus','图片还在读取，请稍等。',true);return}if(!verified&&!hasSaved){step(1);say('networkStatus','请先连接 Wi-Fi。',true);return}let selected;try{selected=selectedCityProfile()}catch(e){say('saveStatus',e.message,true);return}const profile={name:$('name').value,signature:$('sig').value,address:loadedProfile.address||'',...selected};for(const [key,max] of [['name',31],['signature',95],['address',127],['city',47],['region',31],['radio_city',47],['lat',15],['lon',15]])if(bytes(profile[key])>max){say('saveStatus','有一项内容过长，请缩短后再保存。',true);return}$('save').disabled=true;$('back').disabled=true;try{renderCards();if(pendingMuseConfig()){say('saveStatus','正在保存 Muse 配置…');await saveMuseConfig(true)}say('saveStatus','正在保存个人资料…');await api('/api/profile',profile);if(portrait){say('saveStatus','正在保存人像…');await api('/api/avatar',portraitPacked())}await saveCards();say('saveStatus','正在完成设置…');await api('/api/finish',{});$('doneName').textContent=profile.name||'AI 护照';$('doneSummary').textContent='个人资料'+(portrait?'、人像':'')+(cards.length?'、'+cards.length+' 张彩色名片':'')+'已保存';step(3)}catch(e){say('saveStatus',e.message+' 尚未完成的内容可再次保存。',true)}finally{$('save').disabled=false;$('back').disabled=false;renderCards()}}
 $('save').onclick=()=>{cancelLocation();return save()};
-async function load(){try{const [profile,state]=await Promise.all([api('/api/profile'),api('/api/setup')]);await loadCities();for(const [id,key] of [['name','name'],['sig','signature'],['address','address']])$(id).value=profile[key]||'';if(Array.isArray(profile.portrait_palette)&&profile.portrait_palette.length===4)portraitPalette=profile.portrait_palette;if(Array.isArray(profile.portrait_subject_palette)&&profile.portrait_subject_palette.length===4)portraitSubjectPalette=profile.portrait_subject_palette;previewPortrait();restoreCity(profile);$('avatarState').textContent=profile.avatar?'已有，可替换':'可稍后上传';await loadCards();hasSaved=state.saved_network;$('reuse').hidden=!hasSaved;$('keepSaved').hidden=!hasSaved;$('savedField').hidden=!hasSaved;const selected=$('savedNetwork').value;$('savedNetwork').replaceChildren(new Option('自动选择附近已保存的网络',''));for(const name of state.saved_networks||[])$('savedNetwork').add(new Option(name,name));if((state.saved_networks||[]).includes(selected))$('savedNetwork').value=selected;$('connect').disabled=false;say('networkStatus','');if(state.finishing){step(3);return}if(state.state==='connected')networkReady('已连接 '+state.ssid);else if(state.state==='connecting'){lockNetwork(true);polls=0;pollTimer=setTimeout(poll,1000)}await scan()}catch(e){say('networkStatus','无法读取设备。请确认手机已连接设备热点，然后刷新页面。',true)}}
+async function load(){try{const [profile,state]=await Promise.all([api('/api/profile'),api('/api/setup')]);await loadCities();for(const [id,key] of [['name','name'],['sig','signature']])$(id).value=profile[key]||'';if(Array.isArray(profile.portrait_palette)&&profile.portrait_palette.length===4)portraitPalette=profile.portrait_palette;if(Array.isArray(profile.portrait_subject_palette)&&profile.portrait_subject_palette.length===4)portraitSubjectPalette=profile.portrait_subject_palette;previewPortrait();restoreCity(profile);$('avatarState').textContent=profile.avatar?'已有，可替换':'可稍后上传';await loadCards();hasSaved=state.saved_network;$('reuse').hidden=!hasSaved;$('keepSaved').hidden=!hasSaved;$('savedField').hidden=!hasSaved;const selected=$('savedNetwork').value;$('savedNetwork').replaceChildren(new Option('自动选择附近已保存的网络',''));for(const name of state.saved_networks||[])$('savedNetwork').add(new Option(name,name));if((state.saved_networks||[]).includes(selected))$('savedNetwork').value=selected;$('connect').disabled=false;say('networkStatus','');if(state.finishing){step(3);return}if(state.state==='connected')networkReady('已连接 '+state.ssid);else if(state.state==='connecting'){lockNetwork(true);polls=0;pollTimer=setTimeout(poll,1000)}await scan()}catch(e){say('networkStatus','无法读取设备。请确认手机已连接设备热点，然后刷新页面。',true)}}
+$('copyVoiceTutorial').onclick=async()=>{
+ const link=$('voiceTutorialLink'),url='https://github.com/manchunx7-bit/passport-os';
+ let copied=false;
+ if(window.isSecureContext&&navigator.clipboard?.writeText){try{await navigator.clipboard.writeText(url);copied=true}catch(e){}}
+ if(!copied){
+  link.value=url;link.hidden=false;link.focus();link.select();link.setSelectionRange(0,url.length);
+  try{copied=document.execCommand('copy')}catch(e){}
+ }
+ link.hidden=copied;
+ say('voiceCopyStatus',copied?'教程链接已复制，请在电脑打开。':'请长按链接复制，再在电脑打开。');
+ if(!copied){link.focus();link.select();link.setSelectionRange(0,url.length)}
+};
 load().finally(()=>loadMuse());
 </script></body></html>

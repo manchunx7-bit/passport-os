@@ -19,6 +19,11 @@ bool ui_sfx_prepare_stop(void);
 void ui_sfx_log_diagnostics(void);
 
 #define UI_SFX_RATE 16000
+// Alarm output level, fixed regardless of master volume (rings even at 0).
+// 90 maps to -2 dB on the speaker curve; the -1.4 dBFS beep stays unclipped.
+#define UI_SFX_ALARM_VOLUME 90
+#define UI_SFX_ALARM_BEEP 1920
+#define UI_SFX_ALARM_GAP 640
 unsigned ui_sfx_samples(ui_sfx_kind_t kind);
 int16_t ui_sfx_sample(ui_sfx_kind_t kind, unsigned index);
 

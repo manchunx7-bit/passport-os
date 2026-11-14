@@ -26,8 +26,8 @@ jobs:
 
       - name: Install verified actionlint
         run: |
-          actionlint_bin="$(./tools/install-actionlint.sh "$RUNNER_TEMP/actionlint")"
+          actionlint_bin="$(bash tools/install-actionlint.sh "$RUNNER_TEMP/actionlint")"
           echo "ACTIONLINT_BIN=${actionlint_bin}" >> "$GITHUB_ENV"
 
       - name: Validate repository and run host tests
-        run: ./tools/validate.sh --static
+        run: bash tools/validate.sh --static

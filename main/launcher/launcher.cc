@@ -19,7 +19,8 @@ static const char *TAG = "launcher";
 
 namespace {
 
-constexpr size_t kIconParts = 10;
+constexpr int kIconSize = 88;
+constexpr int kTitleY = 110;
 
 // 旅行仪器配色:与首页(app_home.cc)完全同源,风格统一。
 #define kBg (UI_BG)          // 屏底炭黑
@@ -36,7 +37,8 @@ lv_obj_t *s_app_title;
 lv_obj_t *s_clock;
 lv_obj_t *s_page_number;
 lv_obj_t *s_icon;
-lv_obj_t *s_icon_parts[kIconParts];
+passport_app_id_t s_icon_id = APP_ID_COUNT;
+uint32_t s_icon_color = 0;
 lv_obj_t *s_wifi_bars[3];
 ui_pixel_battery_t s_battery;
 size_t s_selected_index;
@@ -86,34 +88,6 @@ const char *app_chinese_name(passport_app_id_t id) {
     }
 }
 
-// 像素块:方角(至多 1px 圆角),保证所有图标是同一套"积木"语言
-void set_part(size_t index, int x, int y, int w, int h, uint32_t color) {
-    if (index >= kIconParts) return;
-    lv_obj_t *part = s_icon_parts[index];
-    lv_obj_clear_flag(part, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_pos(part, x, y);
-    lv_obj_set_size(part, w, h);
-    lv_obj_set_style_radius(part, 0, 0);
-    lv_obj_set_style_border_width(part, 0, 0);
-    lv_obj_set_style_bg_color(part, lv_color_hex(color), 0);
-    lv_obj_set_style_bg_opa(part, LV_OPA_COVER, 0);
-}
-
-// 描边块:纸底 + 墨边,用于图标里的"空心"结构(机身/屏幕)
-void set_frame(size_t index, int x, int y, int w, int h, uint32_t color,
-               int border) {
-    if (index >= kIconParts) return;
-    lv_obj_t *part = s_icon_parts[index];
-    lv_obj_clear_flag(part, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_pos(part, x, y);
-    lv_obj_set_size(part, w, h);
-    lv_obj_set_style_radius(part, 0, 0);
-    lv_obj_set_style_border_width(part, border, 0);
-    lv_obj_set_style_border_color(part, lv_color_hex(color), 0);
-    lv_obj_set_style_bg_color(part, lv_color_hex(UI_BG), 0);
-    lv_obj_set_style_bg_opa(part, LV_OPA_COVER, 0);
-}
-
 // Shared neon accents stay outside every application's 88x88 icon geometry.
 void draw_icon_accents(lv_event_t *event) {
     auto *icon = static_cast<lv_obj_t *>(lv_event_get_target(event));
@@ -137,142 +111,296 @@ void draw_icon_accents(lv_event_t *event) {
     }
 }
 
-void draw_app_icon(passport_app_id_t id, uint32_t color) {
-    const uint32_t detail = ui_theme_is_multicolor() ? UI_SECONDARY : color;
-    const uint32_t warm = ui_theme_is_multicolor() ? UI_TERTIARY : color;
-    lv_obj_invalidate(s_icon);
-    for (lv_obj_t *part : s_icon_parts) lv_obj_add_flag(part, LV_OBJ_FLAG_HIDDEN);
+// One line-icon vocabulary: a 17x17 grid of 3px cells drawn in the app color,
+// strokes one cell wide, no fills or second tone. Each glyph is centered on
+// the grid, so new apps add one table entry instead of hand-placed strokes.
+constexpr int kGlyphCells = 17;
+constexpr int kGlyphCell = 3;
+constexpr int kGlyphOrigin = (kIconSize - kGlyphCells * kGlyphCell) / 2;
+struct IconGlyph {
+    passport_app_id_t id;
+    const char *rows[kGlyphCells];
+};
+constexpr IconGlyph kIconGlyphs[] = {
+    {APP_ID_XIAOZHI, {  // antenna robot
+        ".................",
+        ".......###.......",
+        "........#........",
+        "..#############..",
+        "..#...........#..",
+        "..#...........#..",
+        "###...#...#...###",
+        "###...#...#...###",
+        "###...........###",
+        "..#...........#..",
+        "..#....###....#..",
+        "..#...........#..",
+        "..#############..",
+        "........#........",
+        ".....#######.....",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_RADIO, {  // radio with antenna
+        ".................",
+        ".........##......",
+        ".......##........",
+        ".....##..........",
+        "...##............",
+        "#################",
+        "#...............#",
+        "#...............#",
+        "#.######..#####.#",
+        "#.........#...#.#",
+        "#.######..#.#.#.#",
+        "#.........#...#.#",
+        "#.######..#####.#",
+        "#...............#",
+        "#################",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_NETEASE, {  // beamed notes
+        ".................",
+        ".................",
+        ".....###########.",
+        ".....###########.",
+        ".....#.........#.",
+        ".....#.........#.",
+        ".....#.........#.",
+        ".....#.........#.",
+        ".....#.........#.",
+        ".....#.........#.",
+        ".....#.........#.",
+        "..####......####.",
+        ".#...#.....#...#.",
+        ".#...#.....#...#.",
+        "..###.......###..",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_VOICE, {  // microphone
+        ".................",
+        ".................",
+        "......#####......",
+        ".....#.....#.....",
+        ".....#.....#.....",
+        ".....#.....#.....",
+        ".....#.....#.....",
+        "..#..#.....#..#..",
+        "..#..#.....#..#..",
+        "..#...#####...#..",
+        "...#.........#...",
+        "....#########....",
+        "........#........",
+        "........#........",
+        ".....#######.....",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_MUSE, {  // chat bubble with sparkle
+        ".................",
+        "..............#..",
+        ".............###.",
+        "..............#..",
+        ".###########.....",
+        "#...........#....",
+        "#...........#....",
+        "#...........#....",
+        "#..#..#..#..#....",
+        "#...........#....",
+        "#...........#....",
+        "#...........#....",
+        ".#.#########.....",
+        ".##..............",
+        ".#...............",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_POMODORO, {  // tomato clock
+        "........#........",
+        "......##.##......",
+        "......#####......",
+        "....##.....##....",
+        "...#.........#...",
+        "..#.....#.....#..",
+        "..#.....#.....#..",
+        ".#......#......#.",
+        ".#......#......#.",
+        ".#......####...#.",
+        ".#.............#.",
+        ".#.............#.",
+        "..#...........#..",
+        "..#...........#..",
+        "...#.........#...",
+        "....##.....##....",
+        "......#####......",
+    }},
+    {APP_ID_STOPWATCH, {  // stopwatch
+        ".......###.......",
+        "........#.....#..",
+        "......#####..#...",
+        "....##.....##....",
+        "...#.........#...",
+        "..#...........#..",
+        "..#........#..#..",
+        ".#........#....#.",
+        ".#.......#.....#.",
+        ".#......#......#.",
+        ".#.............#.",
+        ".#.............#.",
+        "..#...........#..",
+        "..#...........#..",
+        "...#.........#...",
+        "....##.....##....",
+        "......#####......",
+    }},
+    {APP_ID_REMINDERS, {  // bell
+        ".................",
+        ".................",
+        "........#........",
+        "......#####......",
+        ".....#.....#.....",
+        "....#.......#....",
+        "....#.......#....",
+        "....#.......#....",
+        "....#.......#....",
+        "...#.........#...",
+        "...#.........#...",
+        "..#...........#..",
+        ".###############.",
+        ".................",
+        ".......###.......",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_LISTS, {  // list page
+        ".................",
+        ".................",
+        "..#############..",
+        "..#...........#..",
+        "..#...........#..",
+        "..#..#..#####.#..",
+        "..#...........#..",
+        "..#...........#..",
+        "..#..#..#####.#..",
+        "..#...........#..",
+        "..#...........#..",
+        "..#..#..###...#..",
+        "..#...........#..",
+        "..#...........#..",
+        "..#############..",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_TETRIS, {  // T tetromino
+        ".................",
+        ".................",
+        ".................",
+        "################.",
+        "#....#....#....#.",
+        "#....#....#....#.",
+        "#....#....#....#.",
+        "#....#....#....#.",
+        "################.",
+        ".....#....#......",
+        ".....#....#......",
+        ".....#....#......",
+        ".....#....#......",
+        ".....######......",
+        ".................",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_GAME, {  // paw print
+        ".................",
+        ".................",
+        "....###...###....",
+        "...#...#.#...#...",
+        "...#...#.#...#...",
+        "....###...###....",
+        ".###.........###.",
+        "#...#.......#...#",
+        "#...#..###..#...#",
+        ".###..#...#..###.",
+        ".....#.....#.....",
+        "....#.......#....",
+        "....#.......#....",
+        "....#.......#....",
+        ".....###.###.....",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_SOUND_JUMP, {  // Claude character
+        ".................",
+        ".................",
+        "..#############..",
+        "..#...........#..",
+        "..#...........#..",
+        "..#..#.....#..#..",
+        "###..#.....#..###",
+        "#.#...........#.#",
+        "###...........###",
+        "..#...........#..",
+        "..#...........#..",
+        "..#############..",
+        "...#.#.....#.#...",
+        "...#.#.....#.#...",
+        ".................",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_SETTINGS, {  // sliders
+        ".................",
+        ".................",
+        "....###..........",
+        "#####.###########",
+        "....###..........",
+        ".................",
+        ".................",
+        "..........###....",
+        "###########.#####",
+        "..........###....",
+        ".................",
+        ".................",
+        "..###............",
+        "###.#############",
+        "..###............",
+        ".................",
+        ".................",
+    }},
+};
 
-    switch (id) {
-        case APP_ID_HOME:
-            // 小房子:阶梯屋顶 + 描边屋身 + 门 + 窗
-            set_part(0, 14, 30, 60, 8, color);
-            set_part(1, 22, 22, 44, 8, color);
-            set_part(2, 32, 14, 24, 8, color);
-            set_frame(3, 20, 38, 48, 34, color, 4);
-            set_part(4, 40, 50, 10, 22, color);   // 门
-            set_part(5, 26, 44, 8, 8, color);     // 窗
-            break;
-        case APP_ID_RADIO:
-            // 收音机:机身 + 喇叭点阵 + 刻度窗 + 天线
-            set_frame(0, 10, 26, 68, 46, color, 4);
-            set_part(1, 18, 34, 24, 14, detail);   // 喇叭
-            set_part(2, 18, 54, 24, 4, color);
-            set_part(3, 18, 62, 24, 4, color);
-            set_part(4, 50, 34, 20, 8, color);    // 刻度窗
-            set_part(5, 50, 48, 20, 4, color);
-            set_part(6, 24, 14, 40, 4, detail);    // 天线
-            set_part(7, 60, 10, 8, 8, color);     // 天线头
-            break;
-        case APP_ID_VOICE:
-            // 麦克风:拾音头 + 支架 + 底座
-            set_frame(0, 30, 8, 28, 44, color, 4);
-            set_part(1, 20, 34, 6, 16, color);    // 左弧
-            set_part(2, 62, 34, 6, 16, color);    // 右弧
-            set_part(3, 20, 50, 48, 6, color);    // 底弧
-            set_part(4, 41, 56, 6, 12, color);    // 立杆
-            set_part(5, 28, 68, 32, 6, color);    // 底座
-            break;
-        case APP_ID_XIAOZHI:
-            // 机器人头(吉祥物同族):头 + 大眼 + 天线 + 围巾
-            set_frame(0, 16, 18, 56, 44, color, 4);
-            set_part(1, 28, 30, 8, 12, color);    // 左眼
-            set_part(2, 52, 30, 8, 12, color);    // 右眼
-            set_part(3, 38, 50, 12, 4, color);    // 嘴
-            set_part(4, 42, 8, 4, 10, detail);     // 天线
-            set_part(5, 38, 4, 12, 6, detail);      // 天线头
-            set_part(6, 26, 64, 36, 6, warm);     // 围巾
-            break;
-        case APP_ID_MUSE:
-                set_frame(0, 18, 18, 52, 46, color, 4);
-                set_part(1, 29, 31, 6, 12, color);
-                set_part(2, 53, 31, 6, 12, color);
-                set_part(3, 36, 53, 16, 4, color);
-                set_part(4, 6, 34, 8, 20, color);
-                set_part(5, 74, 34, 8, 20, color);
-                break;
-        case APP_ID_WIFI:
-            // 信号塔:四级阶梯(与其它图标的"方块"语言一致)
-            set_part(0, 14, 56, 12, 18, color);
-            set_part(1, 32, 44, 12, 30, color);
-            set_part(2, 50, 30, 12, 44, color);
-            set_part(3, 68, 16, 12, 58, color);
-            break;
-        case APP_ID_SETTINGS:
-            // 滑块三行:横轨 + 错位方块钮
-            set_part(0, 14, 20, 60, 6, color);
-            set_part(1, 14, 41, 60, 6, detail);
-            set_part(2, 14, 62, 60, 6, warm);
-            set_part(3, 26, 14, 16, 18, color);
-            set_part(4, 52, 35, 16, 18, detail);
-            set_part(5, 22, 56, 16, 18, warm);
-            break;
-        case APP_ID_GAME:
-            // 你在狗叫什么: 像素狗头(柴犬大脸 + 双折耳 + 眼鼻 + 汪汪大嘴)
-            set_frame(0, 16, 26, 52, 38, color, 4);   // 狗脸主体
-            set_part(1, 10, 18, 14, 16, color);       // 左耳
-            set_part(2, 60, 18, 14, 16, color);       // 右耳
-            set_part(3, 26, 36, 8, 8, color);         // 左眼
-            set_part(4, 50, 36, 8, 8, color);         // 右眼
-            set_part(5, 38, 44, 8, 6, color);         // 黑鼻头
-            set_part(6, 32, 54, 20, 8, color);        // 汪汪张开的大嘴
-            break;
-        case APP_ID_SOUND_JUMP:
-            // Same four-legged Claude silhouette as the game, matching theme in launcher.
-            set_part(0, 14, 16, 60, 40, color);
-            set_part(1, 4, 36, 80, 12, color);
-            set_part(2, 14, 56, 6, 14, color);
-            set_part(3, 26, 56, 6, 14, color);
-            set_part(4, 56, 56, 6, 14, color);
-            set_part(5, 68, 56, 6, 14, color);
-            set_part(6, 26, 26, 6, 12, UI_BG);
-            set_part(7, 56, 26, 6, 12, UI_BG);
-            break;
-        case APP_ID_STOPWATCH:
-            set_part(0, 34, 6, 20, 6, color);
-            set_part(1, 41, 12, 6, 8, color);
-            set_part(2, 66, 18, 10, 6, color);
-            set_frame(3, 16, 24, 56, 50, color, 4);
-            set_part(4, 41, 34, 6, 20, color);
-            set_part(5, 47, 48, 14, 6, color);
-            break;
-        case APP_ID_POMODORO:
-            // Stepped tomato outline and clock hands use the same 4px strokes.
-            // Carve the two overlapping body blocks with the current page color.
-            set_part(0, 42, 8, 4, 16, ui_theme_is_multicolor() ? UI_SUCCESS : color);
-            set_part(1, 26, 14, 16, 4, ui_theme_is_multicolor() ? UI_SUCCESS : color);
-            set_part(2, 46, 14, 16, 4, ui_theme_is_multicolor() ? UI_SUCCESS : color);
-            set_part(3, 24, 24, 40, 48, color);
-            set_part(4, 16, 32, 56, 32, color);
-            set_part(5, 28, 28, 32, 40, UI_BG);
-            set_part(6, 20, 36, 48, 24, UI_BG);
-            set_part(7, 42, 34, 4, 16, color);
-            set_part(8, 46, 46, 12, 4, color);
-            set_part(9, 42, 60, 4, 4, color);
-            break;
-        case APP_ID_TETRIS:
-            // 俄罗斯方块:T/L/方 三种积木错落
-            set_frame(0, 12, 14, 30, 10, color, 3);   // T 横条
-            set_part(1, 22, 24, 10, 10, color);       // T 竖
-            set_part(2, 12, 44, 10, 10, color);       // L 竖
-            set_part(3, 12, 54, 10, 10, color);
-            set_part(4, 22, 54, 10, 10, color);
-            set_part(5, 48, 24, 10, 10, color);       // O 方块
-            set_part(6, 58, 24, 10, 10, color);
-            set_part(7, 48, 34, 10, 10, color);
-            set_part(8, 58, 34, 10, 10, color);
-            set_part(9, 40, 58, 38, 10, color);       // I 长条
-            break;
-        default:
-            break;
+// The icon is drawn into its existing object; no per-part heap allocations.
+void draw_app_icon_event(lv_event_t *event) {
+    const IconGlyph *glyph = nullptr;
+    for (const IconGlyph &g : kIconGlyphs)
+        if (g.id == s_icon_id) glyph = &g;
+    if (!glyph) return;
+    pixel_scene::Ink ink(event);
+    for (int y = 0; y < kGlyphCells; ++y) {
+        const char *row = glyph->rows[y];
+        for (int x = 0; x < kGlyphCells;) {
+            if (row[x] != '#') { ++x; continue; }
+            const int start = x;
+            while (x < kGlyphCells && row[x] == '#') ++x;
+            ink.box(kGlyphOrigin + start * kGlyphCell, kGlyphOrigin + y * kGlyphCell,
+                    (x - start) * kGlyphCell, kGlyphCell, s_icon_color);
+        }
     }
+}
+
+void draw_app_icon(passport_app_id_t id, uint32_t color) {
+    s_icon_id = id;
+    s_icon_color = color;
+    lv_obj_invalidate(s_icon);
 }
 
 void update_card_content() {
     const passport_app_t *app = app_registry_get_by_index(s_selected_index);
     if (!app) return;
-    lv_obj_set_style_text_font(s_app_title,
-        app->id == APP_ID_POMODORO ? &pomodoro_font_20 : &ui_font_20, 0);
+    lv_obj_set_style_text_font(s_app_title, &ui_font_20, 0);
+    ui_pixel_text_color(s_app_title, UI_TEXT);
     lv_label_set_text(s_app_title, app_chinese_name(app->id));
     lv_label_set_text_fmt(s_page_number, "%02u / %02u", (unsigned)s_selected_index + 1,
                           (unsigned)app_registry_get_count());
@@ -281,10 +409,11 @@ void update_card_content() {
         switch (app->id) {
             case APP_ID_RADIO: case APP_ID_GAME: case APP_ID_POMODORO: color = UI_TERTIARY; break;
             case APP_ID_VOICE: case APP_ID_TETRIS: color = UI_SECONDARY; break;
-            case APP_ID_XIAOZHI: case APP_ID_STOPWATCH: color = UI_SUCCESS; break;
+            case APP_ID_XIAOZHI: case APP_ID_STOPWATCH: case APP_ID_LISTS: color = UI_SUCCESS; break;
+            case APP_ID_REMINDERS: color = UI_WARNING; break;
+            case APP_ID_NETEASE: color = UI_DANGER; break;
             default: break;
         }
-        ui_pixel_text_color(s_app_title, color);
     }
     draw_app_icon(app->id, color);
     lv_obj_invalidate(s_card);
@@ -339,8 +468,8 @@ void launcher_ui_init(void) {
 
     // ---- 状态栏 (y0..24):与首页同款 —— 炭灰条 + 共享 Wi-Fi 格 + 电池 ----
     ui_pixel_top_bar(s_screen);
-    ui_pixel_wifi_bars_create(s_screen, 12, 18, s_wifi_bars);
-    s_battery = ui_pixel_battery_create(s_screen, 206, 6, kStatus,
+    ui_pixel_wifi_bars_create(s_screen, UI_STATUS_WIFI_X, 18, s_wifi_bars);
+    s_battery = ui_pixel_battery_create(s_screen, UI_STATUS_BATTERY_X, 6, kStatus,
                                         &lv_font_montserrat_14);
 
     lv_obj_t *catalogue = ui_pixel_label(s_screen, "应用", &buddy_font_16, UI_TEXT);
@@ -366,18 +495,13 @@ void launcher_ui_init(void) {
     lv_obj_set_style_text_align(s_page_number, LV_TEXT_ALIGN_RIGHT, 0);
     s_icon = lv_obj_create(s_card);
     lv_obj_remove_style_all(s_icon);
-    lv_obj_set_size(s_icon, 88, 88);
+    lv_obj_set_size(s_icon, kIconSize, kIconSize);
     lv_obj_set_pos(s_icon, 64, 18);
     lv_obj_remove_flag(s_icon, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(s_icon, draw_icon_accents, LV_EVENT_DRAW_MAIN, nullptr);
-    for (lv_obj_t *&part : s_icon_parts) {
-        part = lv_obj_create(s_icon);
-        lv_obj_remove_style_all(part);
-        lv_obj_set_style_bg_opa(part, LV_OPA_COVER, 0);
-        lv_obj_remove_flag(part, LV_OBJ_FLAG_SCROLLABLE);
-    }
+    lv_obj_add_event_cb(s_icon, draw_app_icon_event, LV_EVENT_DRAW_MAIN, nullptr);
     s_app_title = ui_pixel_label(s_card, "", &ui_font_20, UI_TEXT);
-    lv_obj_set_pos(s_app_title, 0, 105); lv_obj_set_size(s_app_title, 216, 28);
+    lv_obj_set_pos(s_app_title, 0, kTitleY); lv_obj_set_size(s_app_title, 216, 28);
     lv_label_set_long_mode(s_app_title, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(s_app_title, LV_TEXT_ALIGN_CENTER, 0);
 
@@ -414,7 +538,6 @@ void launcher_ui_hide(void) {
     s_page_number = nullptr;
     s_icon = nullptr;
     s_battery = {nullptr, nullptr};
-    for (lv_obj_t *&part : s_icon_parts) part = nullptr;
     for (lv_obj_t *&bar : s_wifi_bars) bar = nullptr;
     bsp_lvgl_unlock();
 }

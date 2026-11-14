@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <atomic>
 
 #include <esp_event.h>
 #include <esp_timer.h>
@@ -60,6 +61,10 @@ public:
     // Someone is using the device: if we are idle waiting out the backoff,
     // scan now and restart the backoff from the minimum. Throttled.
     void ScanNow();
+    // Nobody is looking (screen off, no streaming app): stretch offline scans to
+    // kIdleScanIntervalSeconds. A key press calls ScanNow() before the next look.
+    void SetScanIdle(bool idle) { scan_idle_.store(idle, std::memory_order_relaxed); }
+    static constexpr int kIdleScanIntervalSeconds = 300;
     void SetHostname(const std::string& hostname) { hostname_ = hostname; }
     void SetPreferredSsid(std::function<std::string()> provider) { preferred_ssid_ = std::move(provider); }
     void SetNetworkAllowed(std::function<bool(const std::string&)> predicate) { network_allowed_ = std::move(predicate); }
@@ -85,6 +90,7 @@ private:
     uint8_t failure_retry_cnt_ = 3;  // Retries on strongest AP before falling back
     int reconnect_count_ = 0;
     int64_t last_scan_now_us_ = 0;
+    std::atomic<bool> scan_idle_{false};
 
     // Exponential backoff for scan interval
     int scan_min_interval_microseconds_ = 10 * 1000 * 1000;   // Default 10 seconds

@@ -60,5 +60,33 @@ int main(void) {
     s.phase = POMODORO_FOCUS; s.completed = UINT32_MAX;
     pomodoro_reset(&s); pomodoro_toggle(&s, now); finish(&s, &now);
     assert(s.completed == UINT32_MAX);
-    printf("Pomodoro: %zu-byte state, monotonic timing, background/sleep, pause, exact completion, manual phases, four-round long break and reset PASS\n", sizeof(s));
+    /* Voice commands must not behave like a toggle or restart on retry. */
+    s = (pomodoro_t)POMODORO_INITIALIZER;
+    assert(pomodoro_command(&s,POMODORO_RESUME,0,now)==POMODORO_COMMAND_CONFLICT);
+    assert(pomodoro_command(&s,POMODORO_START,POMODORO_FOCUS,now)==POMODORO_COMMAND_OK);
+    uint64_t deadline=s.deadline_us;
+    now+=10000000;
+    assert(pomodoro_command(&s,POMODORO_START,POMODORO_FOCUS,now)==POMODORO_COMMAND_OK && s.deadline_us==deadline);
+    assert(pomodoro_command(&s,POMODORO_START,POMODORO_SHORT_BREAK,now)==POMODORO_COMMAND_CONFLICT && s.deadline_us==deadline);
+    assert(pomodoro_command(&s,POMODORO_PAUSE,0,now)==POMODORO_COMMAND_OK);
+    const uint64_t voice_paused=s.remaining_us;
+    now+=60000000;
+    assert(pomodoro_command(&s,POMODORO_PAUSE,0,now)==POMODORO_COMMAND_OK && s.remaining_us==voice_paused);
+    assert(pomodoro_command(&s,POMODORO_START,0,now)==POMODORO_COMMAND_CONFLICT);
+    assert(pomodoro_command(&s,POMODORO_RESUME,0,now)==POMODORO_COMMAND_OK && s.deadline_us==now+voice_paused);
+    deadline=s.deadline_us;now+=10000000;
+    assert(pomodoro_command(&s,POMODORO_RESUME,0,now)==POMODORO_COMMAND_OK && s.deadline_us==deadline);
+    now=deadline;
+    assert(pomodoro_command(&s,POMODORO_PAUSE,0,now)==POMODORO_COMMAND_CONFLICT);
+    assert(s.status==POMODORO_FINISHED && s.completed==1 && s.sound_pending && s.notice_pending);
+    assert(pomodoro_command(&s,POMODORO_QUERY,0,now)==POMODORO_COMMAND_OK && s.completed==1);
+    assert(pomodoro_command(&s,POMODORO_RESET,0,now)==POMODORO_COMMAND_OK && s.completed==1 && !s.sound_pending);
+    assert(pomodoro_command(&s,POMODORO_START,3,now)==POMODORO_COMMAND_INVALID && s.status==POMODORO_READY);
+    assert(pomodoro_command(&s,(pomodoro_action_t)99,0,now)==POMODORO_COMMAND_INVALID);
+    for (uint8_t phase=0;phase<3;++phase) {
+        assert(pomodoro_command(&s,POMODORO_START,phase,now)==POMODORO_COMMAND_OK);
+        assert(s.phase==phase && s.remaining_us==pomodoro_duration_us(phase));
+        assert(pomodoro_command(&s,POMODORO_RESET,0,now)==POMODORO_COMMAND_OK);
+    }
+    printf("Pomodoro: %zu-byte state, background/sleep, exact completion, phases and idempotent voice commands PASS\n", sizeof(s));
 }

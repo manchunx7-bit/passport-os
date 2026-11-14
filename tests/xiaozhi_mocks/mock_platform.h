@@ -64,6 +64,7 @@ inline int xQueueReceive(QueueHandle_t q,void *p,TickType_t) {
     if(!q || q->entries.empty()) return pdFALSE;
     std::memcpy(p,q->entries.front().data(),q->size); q->entries.pop_front(); return pdTRUE;
 }
+inline void vQueueDelete(QueueHandle_t q) {delete q;}
 inline void xQueueReset(QueueHandle_t q) {q->entries.clear();}
 inline void vTaskDelay(TickType_t ms) {mock_time+=ms; if(mock_on_wait) mock_on_wait();}
 inline bool mock_task_fail=false;
@@ -106,13 +107,15 @@ inline size_t heap_caps_get_largest_free_block(int) {return mock_largest;}
 inline size_t esp_get_free_heap_size() {return 100000;}
 inline size_t heap_caps_get_free_size(int) {return 100000;}
 inline std::function<void()> mock_on_write;
+inline std::function<void()> mock_on_read;
+inline uint8_t mock_master_volume=100;
 inline int mock_format_fail=0;
 inline int bsp_audio_init() {return ESP_OK;}
 inline void bsp_audio_deinit() {}
 inline int bsp_audio_set_format(uint32_t,int,int) {return mock_format_fail;}
 inline int bsp_audio_set_volume(uint8_t) {return ESP_OK;}
-inline uint8_t bsp_audio_get_master_volume() {return 100;}
-inline int bsp_audio_read(void *,size_t) {return ESP_OK;}
+inline uint8_t bsp_audio_get_master_volume() {return mock_master_volume;}
+inline int bsp_audio_read(void *,size_t) {if(mock_on_read) mock_on_read();return ESP_OK;}
 inline int bsp_audio_write(void *,size_t) {if(mock_on_write) mock_on_write(); return ESP_OK;}
 inline void settings_set_volume(uint8_t) {}
 constexpr int BSP_BTN_OK=0, BSP_BTN_UP=1, BSP_BTN_DOWN=2;
@@ -133,8 +136,19 @@ inline std::vector<std::string> mock_sent_text;
 inline void *esp_websocket_client_init(esp_websocket_client_config_t *) {return reinterpret_cast<void *>(1);}
 inline int esp_websocket_client_start(void *) {return ESP_OK;}
 inline unsigned mock_ws_stops=0, mock_ws_destroys=0;
-inline int esp_websocket_client_stop(void *) {++mock_ws_stops;return ESP_OK;}
-inline int esp_websocket_client_destroy(void *) {++mock_ws_destroys;return ESP_OK;}
+inline unsigned mock_ws_pings=0;
+inline int mock_ws_ping_result=0;
+inline TickType_t mock_ws_ping_timeout=0;
+inline std::vector<std::string> mock_ws_lifecycle;
+enum ws_transport_opcodes_t {WS_TRANSPORT_OPCODES_PING=0x09};
+inline int esp_websocket_client_send_with_opcode(void *,ws_transport_opcodes_t opcode,
+                                                const uint8_t *data,int len,TickType_t timeout) {
+    assert(opcode==WS_TRANSPORT_OPCODES_PING && data==nullptr && len==0);
+    ++mock_ws_pings;mock_ws_ping_timeout=timeout;mock_ws_lifecycle.emplace_back("ping");
+    return mock_ws_ping_result;
+}
+inline int esp_websocket_client_stop(void *) {++mock_ws_stops;mock_ws_lifecycle.emplace_back("stop");return ESP_OK;}
+inline int esp_websocket_client_destroy(void *) {++mock_ws_destroys;mock_ws_lifecycle.emplace_back("destroy");return ESP_OK;}
 inline bool esp_websocket_client_is_connected(void *) {return mock_ws_connected;}
 inline void esp_websocket_register_events(void *,int,void (*)(void *,esp_event_base_t,int32_t,void *),void *) {}
 inline int esp_websocket_client_send_text(void *,const char *s,int n,TickType_t) {

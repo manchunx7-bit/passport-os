@@ -211,13 +211,13 @@ void start() {
     if (!bsp_lvgl_lock(1000)) { passport_muse_stop(); return; }
     s_screen = lv_obj_create(nullptr); ui_pixel_background(s_screen);
     auto *top = ui_pixel_top_bar(s_screen);
-    ui_pixel_wifi_bars_create(top, 12, 18, s_wifi_bars);
+    ui_pixel_wifi_bars_create(top, UI_STATUS_WIFI_X, 18, s_wifi_bars);
     auto *title = ui_pixel_label(top, "Muse", &buddy_font_16, UI_TEXT);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 42, 0);
     s_name = ui_pixel_label(top, "", &buddy_font_16, UI_TEXT_DIM);
-    lv_obj_set_pos(s_name, 100, 4); lv_obj_set_size(s_name, 56, 20);
+    lv_obj_set_pos(s_name, 100, 4); lv_obj_set_size(s_name, UI_STATUS_CONTENT_RIGHT - 100, 20);
     lv_label_set_long_mode(s_name, LV_LABEL_LONG_DOT);
-    s_battery = ui_pixel_battery_create(top, 206, 6, UI_TEXT, &lv_font_montserrat_14);
+    s_battery = ui_pixel_battery_create(top, UI_STATUS_BATTERY_X, 6, UI_TEXT, &lv_font_montserrat_14);
     s_avatar = lv_image_create(s_screen);
     lv_image_set_src(s_avatar,&muse_avatar_frames[0]);
     lv_image_set_pivot(s_avatar,0,0);lv_image_set_antialias(s_avatar,false);

@@ -52,7 +52,14 @@ static void feedback_task(void *arg) {
     int16_t pcm[128];
     for (;;) {
         bool owned = false, idle_exit = false, first = true;
-        if (atomic_load(&s_stop) || !bsp_audio_get_master_volume()) goto done;
+        if (atomic_load(&s_stop)) goto done;
+        // Master mute silences clicks only; alarms use a fixed alert level.
+        if (!bsp_audio_get_master_volume()) {
+            taskENTER_CRITICAL(&s_lock);
+            const bool alarm = s_pending == UI_SFX_ALARM;
+            taskEXIT_CRITICAL(&s_lock);
+            if (!alarm) goto done;
+        }
         taskENTER_CRITICAL(&s_lock);
         const int first_kind = s_pending;
         const int64_t first_requested = s_requested_at;
@@ -66,9 +73,10 @@ static void feedback_task(void *arg) {
         // expire a click that was ready to play when this worker accepted it.
         if (bsp_audio_init_feedback() != ESP_OK) goto failed;
         owned = true;
-        bsp_audio_set_volume(85);
+        if (first_kind == UI_SFX_ALARM) bsp_audio_set_alert_volume(UI_SFX_ALARM_VOLUME);
+        else bsp_audio_set_volume(85);
         if (bsp_audio_set_format(UI_SFX_RATE, 16, 1) != ESP_OK) goto failed;
-        while (!atomic_load(&s_stop) && bsp_audio_get_master_volume()) {
+        while (!atomic_load(&s_stop) && (first_kind == UI_SFX_ALARM || bsp_audio_get_master_volume())) {
             int kind = first_kind;
             int64_t requested = first_requested;
             if (!first) {
@@ -85,8 +93,9 @@ static void feedback_task(void *arg) {
                 for (unsigned offset = 0; offset < count; offset += 128) {
                     // Clicks finish their envelope; a longer alarm yields at
                     // the next 8 ms chunk when an audio app needs the codec.
-                    if (!bsp_audio_get_master_volume() ||
-                        (kind == UI_SFX_ALARM && atomic_load(&s_stop))) { complete = false; break; }
+                    if (kind == UI_SFX_ALARM ? atomic_load(&s_stop) : !bsp_audio_get_master_volume()) {
+                        complete = false; break;
+                    }
                     const unsigned n = count - offset < 128 ? count - offset : 128;
                     for (unsigned i = 0; i < n; ++i) pcm[i] = ui_sfx_sample((ui_sfx_kind_t)kind, offset + i);
                     if (bsp_audio_write(pcm, n * sizeof(int16_t)) != ESP_OK) goto failed;
@@ -180,7 +189,6 @@ void ui_sfx_play(ui_sfx_kind_t kind) {
 
 bool ui_sfx_alarm_tick(void) {
     if (atomic_exchange(&s_alarm_done, false)) return true;
-    if (!bsp_audio_get_master_volume()) { ui_sfx_cancel_alarm(); return true; }
     request_sound(UI_SFX_ALARM);
     return false;
 }

@@ -1,0 +1,5 @@
+# Heap diagnostic overlay (bash build.sh diag). Never ship: task tracking adds a
+# word to every heap block and the alloc hook runs on every allocation.
+CONFIG_HEAP_TASK_TRACKING=y
+CONFIG_HEAP_TRACK_DELETED_TASKS=n
+CONFIG_HEAP_USE_HOOKS=y

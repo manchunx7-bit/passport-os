@@ -89,6 +89,18 @@ int main(int argc,char **argv) {
     assert(!std::strcmp(stations[0].name,"珠海交通875")&&stations[0].frequency_decihz==875);
     assert(std::strstr(stations[0].description,"当地")&&std::strstr(stations[2].description,"省内"));unique(stations,n);
 
+    // Voice handover stops after finding its target; browsing still tops up.
+    // A missing named station must keep looking in the province directory.
+    queries.clear();
+    n=radio_catalog_discover_location(preferred,stations,8,&location,cancel,"");
+    assert(n==8&&queries.size()==1&&!std::strcmp(stations[0].name,"珠海交通875"));
+    queries.clear();
+    n=radio_catalog_discover_location(preferred,stations,8,&location,cancel,"交通");
+    assert(n==8&&queries.size()==1);
+    queries.clear();
+    n=radio_catalog_discover_location(preferred,stations,8,&location,cancel,"广东省内");
+    assert(n==8&&queries.size()==2);
+
     reset();
     city_fixture="["+station("一台","http://unique/live")+"]";
     province_fixture="["+station("重复","http://unique/live")+","+station("省台","http://province/live")+"]";

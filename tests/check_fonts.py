@@ -12,9 +12,6 @@ def extract_glyphs_from_c_font(filepath):
 fonts = {
     'buddy_font_16': extract_glyphs_from_c_font('main/fonts/buddy_font_16.c'),
     'ui_font_20': extract_glyphs_from_c_font('main/fonts/ui_font_20.c'),
-    'voice_font_20': extract_glyphs_from_c_font('main/fonts/voice_font_20.c'),
-    'radio_font': extract_glyphs_from_c_font('main/fonts/radio_font.c'),
-    'radio_font_title': extract_glyphs_from_c_font('main/fonts/radio_font_title.c'),
 }
 
 cjk_re = re.compile(r'[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]')

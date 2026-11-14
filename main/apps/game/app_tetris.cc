@@ -350,7 +350,7 @@ void build_ui() {
     s_score_lbl = mk_label(bar, "0", &lv_font_montserrat_14, UI_YELLOW, LV_TEXT_ALIGN_RIGHT);
     ui_pixel_status_text_align(s_score_lbl, 96, UI_STATUS_CONTENT_RIGHT - 96,
                                LV_TEXT_ALIGN_RIGHT);
-    s_battery = ui_pixel_battery_create(bar, 206, 6, UI_TEXT, &lv_font_montserrat_14);
+    s_battery = ui_pixel_battery_create(bar, UI_STATUS_BATTERY_X, 6, UI_TEXT, &lv_font_montserrat_14);
     ui_pixel_battery_set(&s_battery, bsp_battery_soc()); s_battery_us = esp_timer_get_time();
 
     ensure_styles();

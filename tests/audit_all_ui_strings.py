@@ -12,9 +12,6 @@ def extract_glyphs(filepath):
 fonts = {
     'buddy_font_16': extract_glyphs('main/fonts/buddy_font_16.c'),
     'ui_font_20': extract_glyphs('main/fonts/ui_font_20.c'),
-    'voice_font_20': extract_glyphs('main/fonts/voice_font_20.c'),
-    'radio_font': extract_glyphs('main/fonts/radio_font.c'),
-    'radio_font_title': extract_glyphs('main/fonts/radio_font_title.c'),
 }
 
 # Scan every single file in main/

@@ -5,10 +5,21 @@ else()
     set(PASSPORT_MUSE_AVATAR "apps/muse/muse_avatar_public_frames.c")
 endif()
 idf_component_register(
-    EMBED_TXTFILES "apps/home/phone_setup.html"
     EMBED_FILES "apps/home/cities.json.gz"
     SRCS
         "main.cc"
+        "device_control.cc"
+        "device_control_mcp.cc"
+        "voice_intent.cc"
+        "apps/lists/list_service.cc"
+        "apps/lists/list_mcp.cc"
+        "apps/lists/app_lists.cc"
+        "apps/aihot/aihot_news.cc"
+        "apps/aihot/aihot_mcp.cc"
+        "apps/reminders/reminder_core.cc"
+        "apps/reminders/reminder_service.cc"
+        "apps/reminders/reminder_mcp.cc"
+        "apps/reminders/app_reminders.cc"
         "apps/xiaozhi/opus_encoder_storage.cc"
         "boot_chime.c"
         "ui_sfx.c"
@@ -23,12 +34,9 @@ idf_component_register(
         "launcher/settings.cc"
         "launcher/power.cc"
         "launcher/system_overlay.cc"
-        "fonts/radio_font.c"
-        "fonts/radio_font_title.c"
         "fonts/buddy_font_16.c"
-        "fonts/voice_font_20.c"
         "fonts/ui_font_20.c"
-        "fonts/home_font_12.c"
+        "fonts/ui_digits_32.c"
         "apps/radio/app_radio.cc"
         "apps/radio/radio_catalog.cc"
         "apps/radio/radio_display_settings.cc"
@@ -54,9 +62,17 @@ idf_component_register(
         "apps/xiaozhi/xiaozhi_protocol.cc"
         "apps/xiaozhi/xiaozhi_audio.cc"
         "apps/xiaozhi/xiaozhi_ui.cc"
+        "apps/xiaozhi/xiaozhi_face.cc"
         "apps/xiaozhi/xiaozhi_store.cc"
         "apps/xiaozhi/xiaozhi_ota.cc"
         "apps/xiaozhi/app_xiaozhi.cc"
+        "apps/netease/app_netease.cc"
+        "apps/netease/netease_api.cc"
+        "apps/netease/netease_voice_search.cc"
+        "apps/netease/netease_json.cc"
+        "apps/netease/netease_lyrics.cc"
+        "apps/netease/netease_player.cc"
+        "apps/netease/netease_ui.cc"
         "apps/home/home_profile.c"
         "apps/home/home_clock.c"
         "apps/home/home_weather.c"
@@ -115,6 +131,19 @@ idf_component_register(
 target_link_options(${COMPONENT_LIB} INTERFACE
     "-Wl,--undefined=__wrap_opus_encoder_create,--undefined=__wrap_opus_encoder_destroy"
     "-Wl,--wrap=opus_encoder_create,--wrap=opus_encoder_destroy")
+
+# Phone setup page: gzip at build time (mtime 0, reproducible); served as-is.
+idf_build_get_property(python PYTHON)
+set(phone_setup_html "${CMAKE_CURRENT_SOURCE_DIR}/apps/home/phone_setup.html")
+set(phone_setup_gz "${CMAKE_CURRENT_BINARY_DIR}/phone_setup.html.gz")
+add_custom_command(OUTPUT "${phone_setup_gz}"
+    COMMAND "${python}" -c "import gzip,sys;open(sys.argv[2],'wb').write(gzip.compress(open(sys.argv[1],'rb').read(),9,mtime=0))"
+            "${phone_setup_html}" "${phone_setup_gz}"
+    DEPENDS "${phone_setup_html}"
+    VERBATIM)
+add_custom_target(phone_setup_gz DEPENDS "${phone_setup_gz}")
+add_dependencies(${COMPONENT_LIB} phone_setup_gz)
+target_add_binary_data(${COMPONENT_LIB} "${phone_setup_gz}" BINARY)
 
 if(PASSPORT_RADIO_HLS_TEST)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE PASSPORT_RADIO_HLS_TEST=1)

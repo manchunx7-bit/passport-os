@@ -48,16 +48,18 @@ void wifi_setup_start(void) {
     ui_pixel_background(s_screen);
     auto *top=ui_pixel_top_bar(s_screen);
     auto *name=ui_pixel_label(top,"手机设置",&buddy_font_16,UI_TEXT);lv_obj_align(name,LV_ALIGN_LEFT_MID,12,0);
-    s_battery=ui_pixel_battery_create(top,206,6,UI_TEXT,&lv_font_montserrat_14);
+    s_battery=ui_pixel_battery_create(top,UI_STATUS_BATTERY_X,6,UI_TEXT,&lv_font_montserrat_14);
     ui_pixel_battery_set(&s_battery,bsp_battery_soc());s_battery_tick=lv_tick_get();
     auto *welcome = line(s_required?"欢迎使用 AI Passport OS":"用手机完成设置",44,UI_TEXT,&ui_font_20);
     // The complete product name needs slightly more than the usual 216px row.
     lv_obj_set_pos(welcome, 8, 44);
     lv_obj_set_width(welcome, 224);
     line("1 连接设备热点",84,UI_TEXT_DIM);
-    line(wifi.GetApSsid().c_str(),112,UI_ACCENT,&lv_font_montserrat_14);
+    auto *ssid = line(wifi.GetApSsid().c_str(),110,UI_ACCENT,&ui_font_20);
+    lv_obj_set_pos(ssid, 8, 110);
+    lv_obj_set_width(ssid, 224);
     line("2 手机浏览器打开",158,UI_TEXT_DIM);
-    line("192.168.4.1",190,UI_ACCENT,&lv_font_montserrat_32);
+    line("192.168.4.1",190,UI_ACCENT,&ui_digits_32);
     s_status=line(err==ESP_OK?"提示无互联网时选保留":"服务未启动，确定重试",242,UI_TEXT_DIM);
     lv_obj_set_height(s_status,22);lv_label_set_long_mode(s_status,LV_LABEL_LONG_DOT);
     ui_pixel_footer(s_screen,"配网、资料、名片一起设置",s_required?"长按确定跳过配网":"长按确定返回首页",&buddy_font_16);
@@ -94,7 +96,7 @@ void wifi_setup_tick(void) {
         if (!s_completing.exchange(true)) {
             if (xTaskCreate([](void *) {
                 s_required = false;
-                if (s_active.load()) app_registry_switch_to(APP_ID_HOME);
+                app_registry_complete_setup();
                 s_completing = false;
                 vTaskDelete(nullptr);
             }, "setup_done", 8192, nullptr, 4, nullptr) != pdPASS) s_completing = false;

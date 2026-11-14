@@ -22,6 +22,8 @@
 #include "esp_heap_caps.h"
 #include "boot_chime.h"
 #include "ui_sfx.h"
+#include "apps/reminders/reminder_service.h"
+#include "apps/xiaozhi/app_xiaozhi.h"
 #include <atomic>
 #include <vector>
 
@@ -40,6 +42,9 @@ extern const passport_app_t g_stopwatch_app;
 extern const passport_app_t g_sound_jump_app;
 extern const passport_app_t g_muse_app;
 extern const passport_app_t g_pomodoro_app;
+extern const passport_app_t g_netease_app;
+extern const passport_app_t g_reminders_app;
+extern const passport_app_t g_lists_app;
 
 namespace {
 
@@ -48,22 +53,25 @@ namespace {
 // app_registry_get_by_id() 单独寻址,这样 switch_to(APP_ID_HOME) 才不会找不到而黑屏。
 // AI设备(AI设备/Codex 陪伴精灵)已于 2026-09-12 移除,见 docs/app-review-2026-09-12.md。
 const passport_app_t *s_apps[] = {
-    &g_radio_app,
-    &g_voice_app,
     &g_xiaozhi_app,
+    &g_radio_app,
+    &g_netease_app,
+    &g_voice_app,
     &g_muse_app,
+    &g_pomodoro_app,
+    &g_stopwatch_app,
+    &g_reminders_app,
+    &g_lists_app,
+    &g_tetris_app,
     &g_game_app,
     &g_sound_jump_app,
-    &g_tetris_app,
-    &g_stopwatch_app,
-    &g_pomodoro_app,
     &g_settings_app,   // 设置放最后(应用惯用收尾位置)
 };
 
 constexpr size_t kAppCount = sizeof(s_apps) / sizeof(s_apps[0]);
 bool feedback_allowed(passport_app_id_t id) {
     return id == APP_ID_HOME || id == APP_ID_LAUNCHER || id == APP_ID_SETTINGS ||
-           id == APP_ID_WIFI || id == APP_ID_STOPWATCH || id == APP_ID_POMODORO || id == APP_ID_TETRIS;
+           id == APP_ID_WIFI || id == APP_ID_STOPWATCH || id == APP_ID_POMODORO || id == APP_ID_TETRIS || id == APP_ID_REMINDERS || id == APP_ID_LISTS;
 }
 std::atomic<passport_app_id_t> s_active_id{APP_ID_LAUNCHER};
 wake_gate_t s_wake_gate{};
@@ -95,6 +103,7 @@ struct SwitchGuard {
 WifiPowerSaveLevel power_save_level_for(passport_app_id_t id) {
     switch (id) {
         case APP_ID_RADIO:
+        case APP_ID_NETEASE:
         case APP_ID_VOICE:
         case APP_ID_XIAOZHI:
         case APP_ID_MUSE:
@@ -110,18 +119,23 @@ WifiPowerSaveLevel power_save_level_for(passport_app_id_t id) {
 // 只有当前堆确实放不下目标应用,或上一次重型会话已出现过分配失败时,
 // 才记下目标后软重启,开机直接进入该应用。
 constexpr uint32_t kCleanLaunchMagic = 0x434c4e31; // "CLN1"
+constexpr uint32_t kCleanTalkMagic = 0x54414c4b; // "TALK", same two RTC words
 RTC_NOINIT_ATTR uint32_t s_clean_launch[2];
+bool s_start_xiaozhi_conversation = false; // lifecycle mutex owns this intent
 
 struct HeapNeed {
     size_t largest; // 单块连续需求加余量
     size_t free;    // 整个会话的总占用加余量
 };
 // rc.51 实测(堆追踪诊断版):收音机 MP3 解码器一次申请约 22.9 KiB,会话约占 34 KiB;
-// 小智最大单块 12 KiB(任务栈),会话约占 30 KiB;Muse 工作任务栈 12 KiB 加 TLS 8 KiB。
+// 小智最大单块 12 KiB(任务栈);2026-11-07 实测(设备工具、提醒、清单后)会话峰值约 58 KiB,
+// 会话内音乐搜索另有自身预检(24 KiB);Muse 工作任务栈 12 KiB 加 TLS 8 KiB。
 HeapNeed heap_need(passport_app_id_t id) {
     switch (id) {
         case APP_ID_RADIO: return {24 * 1024, 48 * 1024};
-        case APP_ID_XIAOZHI: return {16 * 1024, 44 * 1024};
+        // Same MP3 decoder as Radio; logged-in requests add TLS only while it is closed.
+        case APP_ID_NETEASE: return {24 * 1024, 48 * 1024};
+        case APP_ID_XIAOZHI: return {16 * 1024, 64 * 1024};
         case APP_ID_MUSE: return {20 * 1024, 44 * 1024};
         default: return {0, 0};
     }
@@ -135,7 +149,7 @@ bool s_heap_strained = false;
 bool s_fresh_heap = false;
 
 bool heavy_app(passport_app_id_t id) {
-    return id == APP_ID_RADIO || id == APP_ID_XIAOZHI || id == APP_ID_MUSE;
+    return id == APP_ID_RADIO || id == APP_ID_NETEASE || id == APP_ID_XIAOZHI || id == APP_ID_MUSE;
 }
 
 // 在旧应用 stop() 之后调用:此时测到的才是新应用可用的堆。
@@ -148,8 +162,10 @@ bool needs_clean_launch(passport_app_id_t id, size_t largest, size_t free) {
 void show_clean_launch_notice(passport_app_id_t id);
 
 [[noreturn]] void clean_launch(passport_app_id_t id) {
-    s_clean_launch[0] = kCleanLaunchMagic;
-    s_clean_launch[1] = static_cast<uint32_t>(id) ^ kCleanLaunchMagic;
+    const uint32_t magic = id == APP_ID_XIAOZHI && s_start_xiaozhi_conversation
+        ? kCleanTalkMagic : kCleanLaunchMagic;
+    s_clean_launch[0] = magic;
+    s_clean_launch[1] = static_cast<uint32_t>(id) ^ magic;
     ESP_LOGW(TAG, "Restarting for a defragmented heap: target app=%d", (int)id);
     show_clean_launch_notice(id);
 #ifdef ESP_PLATFORM
@@ -175,6 +191,9 @@ std::atomic<bool> s_building_target{false};
 uint32_t s_handoff_count = 0;
 uint32_t s_handoff_flushes = 0;
 uint32_t s_panel_flushes = 0;
+// One-shot timing of the first visible frame after each switch (serial log).
+std::atomic<int64_t> s_switch_started_us{0};
+std::atomic<int> s_first_frame_stage{0}; // 0 idle, 1 waiting first flush, 2 waiting refresh end
 
 void resume_target_refresh(lv_display_t *display) {
     if (!s_screen_on.load() || s_building_target.load() ||
@@ -207,7 +226,15 @@ void display_refresh_guard(lv_event_t *event) {
         if (s_handoff_screen && lv_screen_active() == s_handoff_screen) {
             ++s_handoff_flushes;
             ESP_LOGE(TAG, "Unexpected empty handoff flush");
+        } else if (s_first_frame_stage == 1) {
+            s_first_frame_stage = 2;
+            ESP_LOGI(TAG, "First target flush: +%lld ms",
+                     (long long)((esp_timer_get_time() - s_switch_started_us) / 1000));
         }
+    } else if (code == LV_EVENT_REFR_READY && s_first_frame_stage == 2) {
+        s_first_frame_stage = 0;
+        ESP_LOGI(TAG, "First target frame drawn: +%lld ms",
+                 (long long)((esp_timer_get_time() - s_switch_started_us) / 1000));
     }
 }
 
@@ -231,6 +258,8 @@ bool begin_screen_handoff() {
 }
 
 void finish_screen_handoff() {
+    // Arm here: an old-app frame can still be in flight right after handoff.
+    s_first_frame_stage = 1;
     s_building_target = false;
     if (!bsp_lvgl_lock(500)) return;
     if (s_handoff_screen && lv_screen_active() != s_handoff_screen) {
@@ -285,6 +314,7 @@ void app_registry_init(void) {
     lv_display_add_event_cb(lv_display_get_default(), display_refresh_guard, LV_EVENT_REFR_REQUEST, nullptr);
     lv_display_add_event_cb(lv_display_get_default(), display_refresh_guard, LV_EVENT_FLUSH_START, nullptr);
     lv_display_add_event_cb(lv_display_get_default(), display_refresh_guard, LV_EVENT_SCREEN_LOADED, nullptr);
+    lv_display_add_event_cb(lv_display_get_default(), display_refresh_guard, LV_EVENT_REFR_READY, nullptr);
     bsp_lvgl_unlock();
     s_last_activity_us.store(esp_timer_get_time(), std::memory_order_release);
     s_active_id = APP_ID_LAUNCHER;
@@ -316,16 +346,23 @@ const passport_app_t *app_registry_get_by_id(passport_app_id_t id) {
 
 passport_app_id_t app_registry_take_clean_launch(void) {
     const uint32_t magic = s_clean_launch[0];
-    const auto id = static_cast<passport_app_id_t>(s_clean_launch[1] ^ kCleanLaunchMagic);
+    const auto id = static_cast<passport_app_id_t>(s_clean_launch[1] ^ magic);
     s_clean_launch[0] = s_clean_launch[1] = 0; // 一次性:目标应用崩溃时下次开机回首页
-    if (magic != kCleanLaunchMagic || esp_reset_reason() != ESP_RST_SW || !heavy_app(id))
+    if ((magic != kCleanLaunchMagic && magic != kCleanTalkMagic) ||
+        esp_reset_reason() != ESP_RST_SW || !heavy_app(id) ||
+        (magic == kCleanTalkMagic && id != APP_ID_XIAOZHI))
         return APP_ID_COUNT;
+    s_start_xiaozhi_conversation = magic == kCleanTalkMagic;
     s_fresh_heap = true;
     return id;
 }
 
 passport_app_id_t app_registry_get_active(void) {
     return s_active_id;
+}
+
+bool app_registry_switch_pending(void) {
+    return s_pending_target.load() != APP_ID_COUNT || s_building_target.load();
 }
 
 void app_registry_switch_to(passport_app_id_t id) {
@@ -353,6 +390,7 @@ void app_registry_switch_to(passport_app_id_t id) {
         return;
     }
 
+    if (id != APP_ID_XIAOZHI) s_start_xiaozhi_conversation = false;
     const passport_app_t *current = app_registry_get_by_id(s_active_id);
     if (boot_chime_busy() || (!feedback_allowed(id) && !ui_sfx_prepare_stop()) ||
         (current && current->prepare_stop && !current->prepare_stop())) {
@@ -365,6 +403,7 @@ void app_registry_switch_to(passport_app_id_t id) {
     // Free old UI safely without replacing the physical panel image with a
     // loading/return page. The real destination supplies the next visible frame.
     const int64_t switch_started_us = esp_timer_get_time();
+    s_switch_started_us = switch_started_us;
     if (!begin_screen_handoff()) {
         s_pending_target = id;
         ESP_LOGE(TAG, "Unable to prepare screen handoff; app switch cancelled safely");
@@ -420,6 +459,10 @@ void app_registry_switch_to(passport_app_id_t id) {
         }
         if (next->start) next->start();
     }
+    if (id == APP_ID_XIAOZHI && s_start_xiaozhi_conversation) {
+        s_start_xiaozhi_conversation = false;
+        xiaozhi_app_request_conversation();
+    }
     finish_screen_handoff();
     lwip_socket_thread_cleanup();
     ESP_LOGI(TAG, "Target ready: app=%d elapsed_ms=%lld free=%u", id,
@@ -434,6 +477,13 @@ void app_registry_process_pending_switch(void) {
     if (target != APP_ID_COUNT) app_registry_switch_to(target);
 }
 
+void app_registry_complete_setup(void) {
+    SwitchGuard guard;
+    if (!guard.try_take()) return;
+    if (s_active_id == APP_ID_WIFI && s_pending_target == APP_ID_COUNT)
+        app_registry_switch_to(APP_ID_HOME);
+}
+
 void app_registry_dispatch_key(uint8_t btn, app_btn_event_t event, uint16_t mv) {
     // Hold the same lifecycle lock as stop/start while calling app->on_key.
     // Recursive because a key handler may itself request an app switch.
@@ -442,11 +492,15 @@ void app_registry_dispatch_key(uint8_t btn, app_btn_event_t event, uint16_t mv) 
     int64_t now = esp_timer_get_time();
     ESP_LOGI(TAG, "Dispatch Key: btn=%d, evt=%d, mv=%u, cur_active=%d", btn, event, mv, (int)s_active_id.load());
 
+    // DOUBLE is already resolved from two physical short presses. It may
+    // include the waking press and must not be swallowed with its tail.
+    const bool xiaozhi_shortcut = btn == BSP_BTN_OK && event == BTN_EVT_DOUBLE;
+    if (xiaozhi_shortcut) s_wake_gate = {};
     if (wake_gate_consume(&s_wake_gate, event == BTN_EVT_PRESS)) return;
 
     // 1. 熄屏唤醒护栏：如果屏幕已休眠，第一按只点亮屏幕，不透传给业务
     if (!s_screen_on.load(std::memory_order_acquire)) {
-        if (event == BTN_EVT_PRESS || event == BTN_EVT_CLICK) {
+        if (event == BTN_EVT_PRESS || event == BTN_EVT_CLICK || xiaozhi_shortcut) {
             // 先唤醒面板(SLPOUT+DISPON,内部含 120ms 稳定等待),再开背光,
             // 恢复 LVGL 刷新并补一次整屏重绘(睡眠期间的刷屏被面板丢弃过)。
             wake_gate_arm(&s_wake_gate);
@@ -463,12 +517,31 @@ void app_registry_dispatch_key(uint8_t btn, app_btn_event_t event, uint16_t mv) 
                 bsp_lvgl_unlock();
             }
             ESP_LOGI(TAG, "Screen woken up by key press");
-            return;
+            if (!xiaozhi_shortcut) return;
+            s_wake_gate = {};
         }
     }
 
     s_last_activity_us.store(now, std::memory_order_release);
 
+    if (xiaozhi_shortcut) {
+        s_ok_long_triggered = false;
+        reminders::dismiss_for_navigation();
+        // Already in Xiaozhi: request listening without toggling an active
+        // conversation. A pending exit still goes through orderly teardown.
+        if (s_active_id == APP_ID_XIAOZHI && s_pending_target == APP_ID_COUNT) {
+            xiaozhi_app_request_conversation();
+            return;
+        }
+        // Keep the request even while phone setup is committing data. The
+        // input task retries through the same cooperative lifecycle gate.
+        s_start_xiaozhi_conversation = true;
+        s_pending_target = APP_ID_XIAOZHI;
+        app_registry_switch_to(APP_ID_XIAOZHI);
+        return;
+    }
+
+    if (reminders::intercept_key(btn,event)) return;
     const auto source = s_active_id.load();
     auto feedback = [&](ui_sfx_kind_t kind) {
         if (s_pending_target == APP_ID_COUNT && !boot_chime_busy() &&
@@ -477,8 +550,17 @@ void app_registry_dispatch_key(uint8_t btn, app_btn_event_t event, uint16_t mv) 
 
     // 2. 全局拦截:长按 OK = 整机统一的"返回",沿层级上移:
     //    子应用 → 应用板块 → 首页。首页已是顶层,长按无动作。
-    //    (后续所有 App 的交互设计都遵循这条语义,不再各自定义长按 OK。)
+    //    Apps with internal pages may consume Back before the app-level exit.
     if (btn == BSP_BTN_OK && event == BTN_EVT_LONG) {
+        const passport_app_t *app = app_registry_get_by_id(source);
+        if (app && app->on_back) {
+            s_ok_long_triggered = true;
+            if (s_pending_target.load() != APP_ID_COUNT) return;
+            if (app->on_back()) {
+                feedback(UI_SFX_BACK);
+                return;
+            }
+        }
         if (s_active_id == APP_ID_WIFI) {
             s_ok_long_triggered = true;
             if (wifi_setup_can_leave()) {
@@ -578,6 +660,7 @@ void app_registry_keep_awake(void) {
 }
 
 bool app_registry_sound_notice(void) {
+    if (reminders::alarm_active()) return false;
     SwitchGuard guard;
     // LVGL is already held: a blocking take would invert switch->LVGL order.
     if (!guard.try_take(0) || s_building_target.load() ||
@@ -616,6 +699,11 @@ uint16_t app_registry_get_screen_timeout(void) {
 }
 
 bool app_registry_screen_is_on(void) { return s_screen_on.load(std::memory_order_acquire); }
+
+bool app_registry_background_idle(void) {
+    return !s_screen_on.load(std::memory_order_acquire) &&
+           power_save_level_for(s_active_id.load()) == WifiPowerSaveLevel::LOW_POWER;
+}
 
 void app_registry_log_display_state(void) {
     if (!bsp_lvgl_lock(200)) return;

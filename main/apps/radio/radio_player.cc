@@ -320,7 +320,7 @@ StreamResult stream_station(std::size_t station, uint32_t generation) {
             &reader, 5, reinterpret_cast<StackType_t *>(output + kOutputSize), &s_reader_tcb);
         if (!reader_task) break;
         ESP_LOGI(kTag, "Radio buffer: %u bytes, prefill=%u, icy=%u, free=%u",
-            (unsigned)capacity, (unsigned)(capacity * 3 / 4), (unsigned)source.icy_interval(),
+            (unsigned)capacity, (unsigned)(capacity / 2), (unsigned)source.icy_interval(),
             (unsigned)esp_get_free_heap_size());
 
         radio_ui_set_playback(RadioPlaybackState::Buffering, "正在缓冲");
@@ -329,20 +329,20 @@ StreamResult stream_station(std::size_t station, uint32_t generation) {
         bool showing_playing = false;
         uint8_t source_channels = 1;
         bool buffering = true;
-        bool first_fill = true;
         uint32_t refills = 0;
         int64_t stats_at = esp_timer_get_time();
         while (request_still_current(generation, station)) {
             const bool finished = reader.finished.load(std::memory_order_acquire);
             const auto available = reader.buffer.available();
             if (finished && !available) break;
-            const auto resume_at = first_fill ? capacity * 3 / 4 : capacity / 2;
+            // Begin at the normal refill watermark (8 KiB), retaining the full
+            // 16 KiB FIFO and the same recovery reserve after an underrun.
+            const auto resume_at = capacity / 2;
             if (buffering && available < resume_at && !finished) {
                 vTaskDelay(pdMS_TO_TICKS(10));
                 continue;
             }
             buffering = false;
-            first_fill = false;
             const auto received = reader.buffer.read(input, kInputSize);
             if (!received) {
                 buffering = true;

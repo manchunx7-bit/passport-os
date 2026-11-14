@@ -214,7 +214,10 @@ void WifiStation::StartScan() {
 void WifiStation::ScheduleNextScan() {
     if (!timer_handle_) return;
     esp_timer_stop(timer_handle_);
-    esp_timer_start_once(timer_handle_, scan_current_interval_microseconds_);
+    int64_t delay = scan_current_interval_microseconds_;
+    if (scan_idle_.load(std::memory_order_relaxed))
+        delay = std::max<int64_t>(delay, kIdleScanIntervalSeconds * 1000LL * 1000LL);
+    esp_timer_start_once(timer_handle_, delay);
     UpdateScanInterval();
 }
 

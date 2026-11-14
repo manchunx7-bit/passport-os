@@ -18,6 +18,7 @@ static int connection_starts=0;
 static bool session_allocation_ok=true;
 static bool audio_init_ok=true;
 static int stop_requests=0;
+static bool idle_ui_saw_playback=false;
 static std::string status;
 namespace xiaozhi {
 Protocol::Protocol() {}
@@ -27,6 +28,7 @@ bool Protocol::Start(const std::string &,const std::string &,int) {++connection_
 void Protocol::Stop() {client_=nullptr;hello_ok_=false;state_=State::Disconnected;needs_restart_=true;}
 void Protocol::SetState(State s) {state_=s;}
 bool Protocol::PopCriticalEvent(Event *) {return false;}
+bool Protocol::ProcessMcp() {return false;}
 bool Protocol::TriggerStartListen() {++listen_starts;state_=State::Listening;return true;}
 bool Protocol::TriggerAbort() {++aborts;state_=State::Idle;return true;}
 bool Protocol::SendAudio(const uint8_t *,size_t) {return true;}
@@ -48,7 +50,8 @@ bool AudioService::HasPendingPlayback() const {return false;}
 void AudioService::SetPlaybackSampleRate(int) {}
 OtaOutcome ota_fetch_config() {OtaOutcome r;r.result=OtaResult::Ok;r.url="wss://mock";return r;}
 void ui_init() {} void ui_show() {} void ui_hide() {}
-void ui_set_state(State) {} void ui_set_status_text(const std::string &s) {status=s;}
+void ui_set_state(State state) {if(state==State::Idle)idle_ui_saw_playback=AudioService::GetInstance().IsPlaying();}
+void ui_set_emotion(const char *) {} void ui_set_status_text(const std::string &s) {status=s;}
 void ui_set_user_text(const std::string &) {} void ui_set_ai_text(const std::string &) {}
 void ui_set_hint(const std::string &) {} void ui_clear_text() {} void ui_set_volume(unsigned) {}
 }
@@ -61,6 +64,9 @@ static void connected(bool ready) {
 }
 int main() {
     s_cmd_q=xQueueCreateStatic(kCmdQueueDepth,sizeof(Cmd),s_cmd_items,&s_cmd_queue_storage);
+    s_app_active=true;s_stop_requested=false;
+    s_cur_state=State::Speaking;xiaozhi::AudioService::GetInstance().is_playing_=true;
+    on_state_changed(State::Idle);assert(!idle_ui_saw_playback);
     connected(true);proto().SetState(State::Thinking);on_state_changed(State::Thinking);
     mock_time+=1000;proto().SetState(State::Speaking);on_state_changed(State::Speaking);
     assert(s_thinking_since_ms==0);
@@ -155,6 +161,47 @@ int main() {
     const int before_listen_timeout=aborts;
     mock_time+=30000;tick();assert(aborts==before_listen_timeout+1);
     assert(!s_conversation_active && s_listening_since_ms==0);
+
+    // Explicit double-click intent bypasses a full ordinary command queue,
+    // waits for Hello/audio, and is idempotent throughout an active turn.
+    xQueueReset(s_cmd_q);
+    for(int i=0;i<kCmdQueueDepth;++i) post_cmd(Cmd::Connect);
+    connected(false);proto().Stop();s_connect_failures=0;s_audio_recovery_required=false;
+    s_cfg_valid=true;s_cfg_fetched_ms=mock_time;s_cfg_url="wss://mock";
+    const int before_auto=record_starts,before_connect=connection_starts;
+    xiaozhi_app_request_conversation();process_conversation_request();
+    assert(connection_starts==before_connect+1&&s_listen_after_connect);
+    assert(record_starts==before_auto&&!s_conversation_requested);
+    xiaozhi_app_request_conversation();process_conversation_request();
+    assert(connection_starts==before_connect+1&&record_starts==before_auto);
+    session_allocation_ok=false;proto().hello_ok_=true;proto().SetState(State::Idle);
+    handle_proto_event(hello);assert(record_starts==before_auto&&s_listen_after_connect);
+    session_allocation_ok=true;do_connect();proto().hello_ok_=true;proto().SetState(State::Idle);
+    handle_proto_event(hello);assert(record_starts==before_auto+1&&!s_listen_after_connect);
+    const int before_repeat_abort=aborts;
+    for(State st:{State::Listening,State::Thinking,State::Speaking}){
+        proto().SetState(st);xiaozhi_app_request_conversation();process_conversation_request();
+        assert(record_starts==before_auto+1&&aborts==before_repeat_abort);
+    }
+    proto().SetState(State::Idle);xiaozhi_app_request_conversation();process_conversation_request();
+    assert(record_starts==before_auto+2);
+    xiaozhi_app_request_conversation();s_control_running=true;
+    xiaozhi_app_prepare_stop();assert(!s_conversation_requested&&!s_app_active);
+    s_listen_after_connect=true;proto().SetState(State::Idle);handle_proto_event(hello);
+    xiaozhi_app_request_conversation();process_conversation_request();
+    assert(record_starts==before_auto+2&&!s_conversation_requested);
+    do_stop_app();assert(!s_listen_after_connect);
+    // Re-entry within the refresh window reuses the OTA result persisted in
+    // NVS (no second HTTPS); one failed attempt with it fetches OTA again.
+    assert(s_cfg_carried&&!s_cfg_valid&&s_cfg_url.empty());
+    {const unsigned otas=mock_task_creations;const int starts=connection_starts;
+     proto().Stop();s_stop_requested=false;s_connect_failures=0;do_connect();
+     assert(mock_task_creations==otas&&connection_starts==starts+1);
+     proto().Stop();s_connect_failures=1;mock_on_wait=[] {if(mock_pending_task) mock_run_task();};
+     do_connect();mock_on_wait={};
+     assert(mock_task_creations==otas+1&&connection_starts==starts+2&&s_cfg_valid&&!s_cfg_carried);
+     do_stop_app();assert(s_cfg_carried);}
+    s_control_running=false;s_app_active=true;xQueueReset(s_cmd_q);
 
     // OTA completion, timeout/late completion, creation failure and app exit
     // all execute the production ownership code under ASan/UBSan.

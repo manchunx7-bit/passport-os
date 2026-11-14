@@ -21,7 +21,7 @@ run_static_checks() {
         actionlint_bin="$(command -v actionlint || true)"
     fi
     if [[ -z "${actionlint_bin}" || ! -x "${actionlint_bin}" ]]; then
-        actionlint_bin="$(./tools/install-actionlint.sh)"
+        actionlint_bin="$(bash tools/install-actionlint.sh)"
     fi
     "${actionlint_bin}" -color .github/workflows/*.yml
 

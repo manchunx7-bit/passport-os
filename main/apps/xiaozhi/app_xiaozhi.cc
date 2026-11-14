@@ -51,7 +51,9 @@ constexpr int kCmdQueueDepth = 8;
 // 控制任务只做状态机 / UI / 小报文发送（ssl_write 约 2-3KB 栈）。
 // 真正吃栈的两件事已经拆走：OTA 的 mbedTLS 握手 → xzg_ota 临时任务；
 // Opus 编解码 → xzg_audio 常驻共用任务（24KB，见 xiaozhi_audio.cc 的说明）。
-constexpr size_t kControlTaskStack = 6144;
+// MCP tool calls run here (JSON, NVS, device control). 2026-11-07 device probe:
+// 1364 B left of 6144 after an in-session music search; heap-allocated per session.
+constexpr size_t kControlTaskStack = 7168;
 constexpr uint32_t kLoopTickMs = 20;
 
 // 定时器（毫秒）
@@ -92,6 +94,9 @@ std::atomic<bool> s_stop_requested{false};
 // 协议单例是否已经构造完成。构造它会写 NVS（含 SPI-Flash 擦写，调用链很深），
 // 只允许在栈足够大的控制任务里发生；按键任务（3072 字节栈）绝不能触发它。
 std::atomic<bool> s_protocol_ready{false};
+// Separate mailbox: a full volume/key queue cannot lose a double-click's
+// conversation request while OTA/TLS connection is still in progress.
+std::atomic<bool> s_conversation_requested{false};
 
 // 控制任务私有状态
 State s_cur_state = State::Disconnected;
@@ -124,6 +129,10 @@ std::string s_cfg_url;
 std::string s_cfg_token;
 int s_cfg_version = 3;
 int64_t s_cfg_fetched_ms = 0;
+// 跨 App 切换沿用上次 OTA 结果：OTA 成功时已把 url/token/version 写进 NVS，
+// 退出时只释放堆字符串、记下这个标志；再次进入且未过期就直接用 NVS 配置连 WS，
+// 省掉一次 HTTPS/TLS 握手。用它连失败一次就回到重新拉 OTA。
+bool s_cfg_carried = false;
 int s_connect_failures = 0;
 
 int64_t now_ms() { return esp_timer_get_time() / 1000; }
@@ -172,6 +181,11 @@ void clear_timers() {
 void on_state_changed(State st) {
     State old = s_cur_state;
     s_cur_state = st;
+    // TTS stop can arrive with seconds of buffered speech still playing. Keep
+    // the speaking face/waveform until the existing bounded drain finishes.
+    if (old == State::Speaking && st != State::Speaking) {
+        xiaozhi::AudioService::GetInstance().StopPlayback();
+    }
     if (st == State::Listening && old != st) s_listening_since_ms = now_ms();
     if (st != State::Listening) s_listening_since_ms = 0;
     xiaozhi::ui_set_state(st);
@@ -209,7 +223,6 @@ void on_state_changed(State st) {
 
     // 离开"回复中"：把环形缓冲里剩余的音频播完再收尾（尾音不被切掉）
     if (old == State::Speaking && st != State::Speaking) {
-        xiaozhi::AudioService::GetInstance().StopPlayback();
         // 对话模式：上一句回复已彻底播完、扬声器已静音后，再开启下一轮录音。
         // 通过命令队列执行，避免在协议事件处理栈里递归切换音频生命周期。
         if (st == State::Idle && s_conversation_active && s_session_ready &&
@@ -331,7 +344,8 @@ void do_connect() {
     s_retry_reason.clear();
 
     const int64_t t = now_ms();
-    const bool cfg_stale = !s_cfg_valid || (t - s_cfg_fetched_ms > kOtaRefreshMs) ||
+    const bool carried = s_cfg_carried && s_connect_failures == 0;
+    const bool cfg_stale = (!s_cfg_valid && !carried) || (t - s_cfg_fetched_ms > kOtaRefreshMs) ||
                            (s_connect_failures >= kOtaRetryAfterFailures);
 
     // 1. 需要时先向后台换 websocket 配置。官方后台必须走这一步：
@@ -339,6 +353,7 @@ void do_connect() {
     //    activation{code,message} 要求用户先绑定。
     if (cfg_stale) {
         xiaozhi::ui_set_status_text("正在准备连接");
+        s_cfg_carried = false;
         xiaozhi::OtaOutcome ota;
         if (!fetch_ota_config(&ota)) {
             s_retry_reason = "无法连接服务器";
@@ -436,6 +451,7 @@ void do_connect() {
 }
 
 void do_start_listen() {
+    if (s_stop_requested || !s_app_active) return;
     if (proto().NeedsRestart() || !proto().IsConnected()) {
         post_cmd(Cmd::Connect);
         return;
@@ -523,6 +539,7 @@ void do_stop_app() {
 
     s_conversation_active = false;
     s_listen_after_connect = false;
+    s_conversation_requested = false;
     s_session_ready = false;
     // The worker owns a second reference and completes without this task. Keep
     // a global running flag so the next app cannot reuse OTA's response buffer.
@@ -538,6 +555,7 @@ void do_stop_app() {
     s_protocol_ready = false;
     // Reconnects within this app retain the cache; leaving returns all strings
     // allocated during OTA/TLS so they cannot split the next app's codec heap.
+    if (s_cfg_valid) s_cfg_carried = true;
     s_cfg_valid = false;
     std::string{}.swap(s_cfg_url);
     std::string{}.swap(s_cfg_token);
@@ -657,6 +675,7 @@ void handle_proto_event(const Event &ev) {
         break;
 
     case EvType::LlmEmotion:
+        xiaozhi::ui_set_emotion(ev.text);
         break;
 
     case EvType::Alert:
@@ -695,6 +714,19 @@ void handle_cmd(Cmd c) {
         break;
     case Cmd::Stop:        do_stop_app();     break;
     }
+}
+
+void process_conversation_request() {
+    if (!s_conversation_requested.exchange(false) || s_stop_requested || !s_app_active) return;
+    if (proto().NeedsRestart() || !proto().IsConnected() ||
+        !proto().HandshakeDone() || !s_session_ready) {
+        s_listen_after_connect = true;
+        do_connect();
+        return;
+    }
+    // A second double-click is an explicit start request, not ToggleListen:
+    // never stop a recording or interrupt an ongoing answer/thinking turn.
+    if (proto().GetState() == State::Idle) do_start_listen();
 }
 
 void tick() {
@@ -816,7 +848,10 @@ void control_task(void *arg) {
             break;
         }
 
+        process_conversation_request();
+
         // 录音帧的发送在这里完成（不是录音任务），见 drain_audio_tx 的说明
+        if (proto().ProcessMcp()) did_work = true;
         if (drain_audio_tx() > 0) did_work = true;
 
         tick();
@@ -891,6 +926,7 @@ void xiaozhi_app_start(void) {
 
     s_app_active = true;
     s_stop_requested = false;
+    s_conversation_requested = false;
     s_cur_state = State::Disconnected;
     s_listen_after_connect = false;
     clear_timers();
@@ -921,7 +957,12 @@ void xiaozhi_app_start(void) {
     }
 }
 
+void xiaozhi_app_request_conversation(void) {
+    if (s_app_active && !s_stop_requested) s_conversation_requested = true;
+}
+
 bool xiaozhi_app_prepare_stop(void) {
+    s_conversation_requested = false;
     if (s_app_active.exchange(false)) post_cmd(Cmd::Stop);
     if (!s_control_running.load() && s_audio_ready) {
         if (xiaozhi::AudioService::GetInstance().Deinit()) s_audio_ready = false;

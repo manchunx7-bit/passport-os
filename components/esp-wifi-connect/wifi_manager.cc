@@ -141,6 +141,7 @@ void WifiManager::StartStation() {
     station_->SetScanIntervalRange(config_.station_scan_min_interval_seconds,
                                    config_.station_scan_max_interval_seconds);
     station_->SetFailureRetryCnt(config_.station_failure_retry_cnt);
+    station_->SetScanIdle(scan_idle_);
     station_->SetHostname(config_.station_hostname);
 
     // Setup callbacks
@@ -350,6 +351,12 @@ void WifiManager::SetPowerSaveLevel(WifiPowerSaveLevel level) {
 void WifiManager::ScanNow() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (station_active_ && station_) station_->ScanNow();
+}
+
+void WifiManager::SetScanIdle(bool idle) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    scan_idle_ = idle;
+    if (station_) station_->SetScanIdle(idle);
 }
 
 // ==================== Event ====================

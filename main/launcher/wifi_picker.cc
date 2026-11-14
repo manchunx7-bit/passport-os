@@ -55,23 +55,35 @@ void refresh_scan() {
     auto &p = *s_picker;
     auto aps = WifiManager::GetInstance().GetConfigAccessPoints();
     std::sort(aps.begin(), aps.end(), [](const auto &a, const auto &b) { return a.rssi > b.rssi; });
-    const std::string selected = p.selected < p.networks.size() ? p.networks[p.selected].ssid : "";
+    const size_t old_count = p.networks.size();
+    const bool saved_selected = p.selected == 0;
+    const bool return_selected = old_count > 1 && p.selected == old_count - 1;
+    const std::string selected = !saved_selected && !return_selected && p.selected < old_count
+                                     ? p.networks[p.selected].ssid : "";
     p.networks.clear();
+    WifiNetworkView saved{};
+    saved.rssi = -128;
+    std::snprintf(saved.ssid, sizeof(saved.ssid), "%s", "已存网络");
+    p.networks.push_back(saved);
     for (const auto &ap : aps) {
         if (!ap.ssid[0]) continue;
-        if (std::any_of(p.networks.begin(), p.networks.end(), [&](const auto &n) {
+        if (std::any_of(p.networks.begin() + 1, p.networks.end(), [&](const auto &n) {
             return std::strncmp(n.ssid, reinterpret_cast<const char *>(ap.ssid), 32) == 0;
         })) continue;
         WifiNetworkView item{};
         std::memcpy(item.ssid, ap.ssid, 32); item.rssi = ap.rssi; item.secure = ap.authmode != WIFI_AUTH_OPEN;
         p.networks.push_back(item);
     }
-    for (const char *text : {"已存网络", "返回"}) {
-        WifiNetworkView item{}; item.rssi = -128; std::snprintf(item.ssid, sizeof(item.ssid), "%s", text);
-        p.networks.push_back(item);
+    WifiNetworkView back{};
+    back.rssi = -128;
+    std::snprintf(back.ssid, sizeof(back.ssid), "%s", "返回");
+    p.networks.push_back(back);
+    p.selected = return_selected ? p.networks.size() - 1 : 0;
+    if (!saved_selected && !return_selected) {
+        for (size_t i = 1; i + 1 < p.networks.size(); ++i) {
+            if (selected == p.networks[i].ssid) { p.selected = i; break; }
+        }
     }
-    p.selected = 0;
-    for (size_t i = 0; i < p.networks.size(); ++i) if (selected == p.networks[i].ssid) p.selected = i;
     draw();
 }
 
@@ -144,7 +156,7 @@ void wifi_picker_key(uint8_t btn, app_btn_event_t event) {
         else if (btn == BSP_BTN_OK) {
             if (p.page == Page::List) {
                 if (p.selected == count - 1) { bsp_lvgl_unlock(); wifi_picker_close(); return; }
-                if (p.selected == count - 2) { p.page = Page::Saved; p.selected = 0; }
+                if (p.selected == 0) { p.page = Page::Saved; p.selected = 0; }
                 else {
                     const auto n = p.networks[p.selected]; p.ssid = n.ssid; p.secure = n.secure;
                     std::fill(p.password.begin(), p.password.end(), '\0'); p.password.clear(); p.error = nullptr;

@@ -12,7 +12,6 @@
 #include "freertos/task.h"
 #include "lvgl.h"
 #include "src/libs/tjpgd/tjpgd.h"
-#include "radio_font.h"
 #include "app_fonts.h"
 #include "ui_pixel.h"
 #include "ui/pixel_scene.h"
@@ -275,9 +274,6 @@ lv_obj_t *make_box(lv_obj_t *parent, int x, int y, int width, int height,
         lv_obj_set_style_border_width(object, ui_theme_is_classic() ? 1 : 0, 0);
         lv_obj_set_style_border_color(object, lv_color_hex(UI_BORDER), 0);
     }
-    // Radio 主界面对象较多；在单核 ESP32-C3 上分批让出 CPU，避免一次完整
-    // 构建连续占用超过任务看门狗窗口。LVGL 锁仍保持，其他任务不会改 UI。
-    vTaskDelay(1);
     return object;
 }
 
@@ -291,7 +287,6 @@ lv_obj_t *make_label(lv_obj_t *parent, const char *text, int x, int y, int width
     lv_obj_set_style_text_color(object, lv_color_hex(color), 0);
     lv_obj_set_style_text_opa(object, LV_OPA_COVER, 0);
     lv_label_set_long_mode(object, LV_LABEL_LONG_DOT);
-    vTaskDelay(1);
     return object;
 }
 
@@ -540,10 +535,10 @@ void build_main() {
     lv_obj_add_event_cb(s_main_group, draw_radio_body, LV_EVENT_DRAW_MAIN, nullptr);
 
     ui_pixel_top_bar(s_main_group);
-    ui_pixel_wifi_bars_create(s_main_group, 12, 18, s_wifi_bars);
+    ui_pixel_wifi_bars_create(s_main_group, UI_STATUS_WIFI_X, 18, s_wifi_bars);
     make_label(s_main_group, "收音机", 42, 3, 106, UI_TEXT, &buddy_font_16);
     s_clock = nullptr;
-    s_battery = ui_pixel_battery_create(s_main_group, 206, 6, UI_TEXT,
+    s_battery = ui_pixel_battery_create(s_main_group, UI_STATUS_BATTERY_X, 6, UI_TEXT,
                                         &lv_font_montserrat_14);
     ui_pixel_battery_set(&s_battery, bsp_battery_soc());
     s_battery_ticks = 0;
@@ -572,7 +567,7 @@ void build_main() {
     }
     s_dial_glow=nullptr;
     s_dial_needle=make_box(dial,kDialNeedleHome-kDialNeedleWidth/2,18,kDialNeedleWidth,23,kAmber);
-    s_dial_readout=make_label(s_main_group,"",12,203,146,kAmber,&lv_font_montserrat_32);
+    s_dial_readout=make_label(s_main_group,"",12,203,146,kAmber,&ui_digits_32);
     lv_obj_set_height(s_dial_readout,40);
     auto *meter_panel=make_box(s_main_group,12,242,216,22,kBackground);
     for(std::size_t i=0;i<kMeterCount;i++){s_meter[i]=make_box(meter_panel,2+i*12,20,8,2,kGrid);lv_obj_set_style_bg_opa(s_meter[i],LV_OPA_TRANSP,0);}
@@ -604,7 +599,7 @@ void build_config(const char *ssid, const char *url) {
     for (auto &bar : s_wifi_bars) bar = nullptr;
     for (auto &bar : s_meter) bar = nullptr;
 
-    make_label(s_screen, "联网收音机", 12, 12, 216, kText, &radio_font_title);
+    make_label(s_screen, "联网收音机", 12, 12, 216, kText, &ui_font_20);
     lv_obj_t *tag = make_label(s_screen, "首次配网", 12, 45, 216, kAmber);
     set_centered(tag);
     s_pair_dot = make_box(s_screen, 112, 77, 16, 16, kRed, LV_RADIUS_CIRCLE);

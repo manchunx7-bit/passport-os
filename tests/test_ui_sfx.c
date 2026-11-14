@@ -51,7 +51,9 @@ int bsp_audio_init_feedback(void) {
 int bsp_audio_set_format(unsigned rate, uint8_t bits, uint8_t ch) {
     assert(rate == 16000 && bits == 16 && ch == 1); return format_result;
 }
+static int alert_levels;
 void bsp_audio_set_volume(uint8_t v) { assert(v <= 85); }
+void bsp_audio_set_alert_volume(uint8_t v) { assert(v == UI_SFX_ALARM_VOLUME); ++alert_levels; }
 uint8_t bsp_audio_get_master_volume(void) { return volume; }
 void bsp_audio_deinit(void) {
     ++deinits;
@@ -150,15 +152,25 @@ int main(void) {
     play(); ui_sfx_set_enabled(false); before = writes; finish(); assert(writes == before); ui_sfx_set_enabled(true);
     play(); volume = 0; before = writes; finish(); assert(writes == before); volume = 80;
     for (int i = 0; i < 30; ++i) { play(); finish(); }
-    // Alarm has six bounded chimes in three groups, even with clicks disabled.
+    // Alarm has six loud beeps in three groups, even with clicks disabled.
     assert(ui_sfx_samples(UI_SFX_ALARM) == 24000);
     for (unsigned group = 0; group < 3; ++group) {
-        for (unsigned pair = 0; pair < 2; ++pair) {
-            const unsigned base = group * 8000 + pair * 1920;
-            for (unsigned i = 0; i < ui_sfx_samples(UI_SFX_CONFIRM); ++i)
-                assert(ui_sfx_sample(UI_SFX_ALARM, base + i) == ui_sfx_sample(UI_SFX_CONFIRM, i));
+        const unsigned base = group * 8000;
+        int peak = 0, previous = 0; long sum = 0; double energy = 0;
+        for (unsigned i = 0; i < 8000; ++i) {
+            const int sample = ui_sfx_sample(UI_SFX_ALARM, base + i);
+            const bool beep = i < UI_SFX_ALARM_BEEP ||
+                (i >= UI_SFX_ALARM_BEEP + UI_SFX_ALARM_GAP && i < UI_SFX_ALARM_BEEP * 2 + UI_SFX_ALARM_GAP);
+            if (!beep) assert(!sample);
+            // Ramped edges: no gate click at the start or end of each beep.
+            if (i == 0 || i == UI_SFX_ALARM_BEEP - 1 || i == UI_SFX_ALARM_BEEP + UI_SFX_ALARM_GAP) assert(!sample);
+            assert(abs(sample - previous) < 30000);
+            if (abs(sample) > peak) peak = abs(sample);
+            sum += sample; previous = sample; energy += (double)sample * sample;
         }
-        for (unsigned i = 3840; i < 8000; ++i) assert(!ui_sfx_sample(UI_SFX_ALARM, group * 8000 + i));
+        // Near full scale but below clipping; far louder than a 48 ms click.
+        assert(peak >= 24000 && peak <= 28000 && labs(sum) < 8000);
+        assert(energy > 1.0e12);
     }
     ui_sfx_set_enabled(false);
     size_t alarm_before = written_bytes;
@@ -167,9 +179,10 @@ int main(void) {
     ui_sfx_play(UI_SFX_NAV); assert(s_pending == UI_SFX_ALARM);
     assert(!ui_sfx_alarm_tick()); finish();
     assert(written_bytes - alarm_before == 48000 + 256);
+    assert(alert_levels == 1);
     assert(ui_sfx_alarm_tick() && !s_running);
     // Failure, cancellation and app handoff remain retryable, without falsely
-    // reporting delivery; master mute consumes the reminder without a task.
+    // reporting delivery; master mute does not silence the reminder.
     create_failure = true; assert(!ui_sfx_alarm_tick() && !s_running); create_failure = false;
     init_result = ESP_FAIL; assert(!ui_sfx_alarm_tick()); finish();
     assert(!atomic_load(&s_alarm_done)); init_result = 0;
@@ -179,7 +192,8 @@ int main(void) {
     assert(written_bytes - alarm_before == 512 && !atomic_load(&s_alarm_done));
     assert(!ui_sfx_alarm_tick()); ui_sfx_cancel_alarm(); finish(); assert(!atomic_load(&s_alarm_done));
     assert(!ui_sfx_alarm_tick()); finish(); assert(ui_sfx_alarm_tick());
-    volume = 0; old_creates = creates; assert(ui_sfx_alarm_tick() && creates == old_creates); volume = 80;
+    volume = 0; alarm_before = written_bytes; assert(!ui_sfx_alarm_tick()); finish();
+    assert(written_bytes - alarm_before == 48000 + 256 && ui_sfx_alarm_tick()); volume = 80;
     ui_sfx_set_enabled(true);
     assert(creates == deletes && s_lock == 0 && ui_sfx_prepare_stop());
     puts("UI feedback: clean harmonic PCM, smooth envelope, mute, burst coalescing, expired requests, ownership refusal, IO failures, cancellation and 30 sessions PASS");

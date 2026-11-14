@@ -195,7 +195,7 @@ void start(){
  ui_pixel_status_text_align(title,12,80,LV_TEXT_ALIGN_LEFT);
  heading=text(top,"",100,4,UI_STATUS_CONTENT_RIGHT-100,16,&lv_font_montserrat_14,UI_ACCENT);
  ui_pixel_status_text_align(heading,100,UI_STATUS_CONTENT_RIGHT-100,LV_TEXT_ALIGN_RIGHT);
- battery=ui_pixel_battery_create(top,206,6,UI_TEXT,&lv_font_montserrat_14);
+ battery=ui_pixel_battery_create(top,UI_STATUS_BATTERY_X,6,UI_TEXT,&lv_font_montserrat_14);
  ui_pixel_battery_set(&battery,bsp_battery_soc());battery_ms=(uint32_t)(esp_timer_get_time()/1000);
  hint=text(screen,"",12,34,216,22,&buddy_font_16,UI_TEXT);
  arena=lv_obj_create(screen);lv_obj_remove_style_all(arena);lv_obj_set_pos(arena,0,59);lv_obj_set_size(arena,240,189);

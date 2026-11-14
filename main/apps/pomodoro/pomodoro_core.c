@@ -63,3 +63,34 @@ void pomodoro_reset(pomodoro_t *s) {
     s->notice_pending = false;
     s->sound_pending = false;
 }
+
+pomodoro_command_result_t pomodoro_command(pomodoro_t *s, pomodoro_action_t action,
+                                           uint8_t phase, uint64_t now_us) {
+    if (action < POMODORO_QUERY || action > POMODORO_RESET ||
+        (action == POMODORO_START && phase >= POMODORO_PHASE_COUNT))
+        return POMODORO_COMMAND_INVALID;
+    pomodoro_poll(s, now_us);
+    switch (action) {
+    case POMODORO_QUERY: return POMODORO_COMMAND_OK;
+    case POMODORO_START:
+        if (s->status == POMODORO_RUNNING)
+            return s->phase == phase ? POMODORO_COMMAND_OK : POMODORO_COMMAND_CONFLICT;
+        if (s->status == POMODORO_PAUSED) return POMODORO_COMMAND_CONFLICT;
+        s->phase = phase;
+        pomodoro_reset(s);
+        pomodoro_toggle(s, now_us);
+        break;
+    case POMODORO_PAUSE:
+        if (s->status == POMODORO_PAUSED) return POMODORO_COMMAND_OK;
+        if (s->status != POMODORO_RUNNING) return POMODORO_COMMAND_CONFLICT;
+        pomodoro_toggle(s, now_us);
+        break;
+    case POMODORO_RESUME:
+        if (s->status == POMODORO_RUNNING) return POMODORO_COMMAND_OK;
+        if (s->status != POMODORO_PAUSED) return POMODORO_COMMAND_CONFLICT;
+        pomodoro_toggle(s, now_us);
+        break;
+    case POMODORO_RESET: pomodoro_reset(s); break;
+    }
+    return POMODORO_COMMAND_OK;
+}

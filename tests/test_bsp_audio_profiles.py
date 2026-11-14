@@ -130,7 +130,13 @@ int main(void){
   assert(bsp_audio_set_format(16000,16,1)!=ESP_OK);bsp_audio_deinit();assert(!live&&!channels);
  }
  assert(bsp_audio_read(NULL,0)==ESP_ERR_INVALID_STATE && bsp_audio_write(NULL,0)==ESP_ERR_INVALID_STATE);
- puts("BSP capture/playback/duplex/feedback directions, profile conflict, init failure rollback and retry: PASS");
+ /* Alerts ignore master level (even 0) and end with feedback. */
+ steps=fail_at=0;bsp_audio_set_volume(60);bsp_audio_set_alert_volume(90);assert(output_volume()==60*80/100);
+ bsp_audio_set_master_volume(20);assert(bsp_audio_init_feedback()==ESP_OK);
+ bsp_audio_set_alert_volume(90);assert(output_volume()==90);
+ bsp_audio_set_master_volume(0);assert(output_volume()==90);bsp_audio_set_master_volume(20);
+ bsp_audio_deinit();assert(!s_alert_volume && output_volume()==60*20/100);bsp_audio_set_master_volume(80);
+ puts("BSP capture/playback/duplex/feedback directions, profile conflict, init failure rollback and retry, alert volume: PASS");
 }
 '''
 with tempfile.TemporaryDirectory() as tmp:

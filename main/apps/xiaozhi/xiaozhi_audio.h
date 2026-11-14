@@ -50,6 +50,9 @@ public:
     // Non-blocking flag only; safe from input/launcher without constructing the
     // singleton or touching codec/worker handles.
     static void RequestStop();
+    // Lock-free UI snapshot, expires after 180 ms without actual PCM progress.
+    // Does not construct the audio singleton or touch codec/worker handles.
+    static uint8_t VisualLevel();
 
     esp_err_t Init();
     // 应用退出时调用：停掉一切、销毁常驻工作线程、把缓冲还给堆。

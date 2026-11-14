@@ -42,7 +42,7 @@ inline lv_display_t mock_display;
 inline lv_timer_t mock_timer;
 inline lv_obj_t *mock_active=nullptr;
 inline std::set<lv_obj_t*> mock_screens;
-constexpr int LV_EVENT_REFR_REQUEST=1,LV_EVENT_SCREEN_LOADED=2,LV_EVENT_FLUSH_START=3;
+constexpr int LV_EVENT_REFR_REQUEST=1,LV_EVENT_SCREEN_LOADED=2,LV_EVENT_FLUSH_START=3,LV_EVENT_REFR_READY=4;
 constexpr int LV_OPA_COVER=255, LV_OBJ_FLAG_SCROLLABLE=1,UI_BG=0;
 inline lv_obj_t *lv_obj_create(void*){auto *p=new lv_obj_t;mock_screens.insert(p);return p;}
 inline void lv_obj_delete(lv_obj_t *p){assert(p!=mock_active);assert(mock_screens.erase(p));delete p;}

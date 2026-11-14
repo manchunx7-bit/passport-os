@@ -9,7 +9,7 @@ source = (root / 'main/apps/home/app_home.cc').read_text()
 begin = source.index('struct WeatherSchedule {')
 end = source.index('WeatherSchedule s_weather_schedule;', begin)
 schedule = source[begin:end]
-constants = '\n'.join(re.findall(r'constexpr int64_t kWeather(?:FirstDelay|Period|Retry)Ms = \d+;', source))
+constants = '\n'.join(re.findall(r'constexpr int64_t k(?:Weather(?:FirstDelay|Period|Retry)|AirPeriod)Ms = \d+;', source))
 code = r'''
 #include "apps/home/home_profile.h"
 #include <cassert>
@@ -30,8 +30,10 @@ int main() {
     assert(fresh.due(115000,100000,false,city)==0);
     std::snprintf(city.name,sizeof(city.name),"New name");
     assert(fresh.due(115000,100000,false,city)==0);
-    assert(fresh.due(1815999,1800000,false,city)==0);
-    assert(fresh.due(1816000,1800000,false,city)==WeatherSchedule::Weather);
+    // Weather refreshes every 15 minutes; air quality keeps its 30-minute ceiling.
+    assert(fresh.due(915999,900000,false,city)==0);
+    assert(fresh.due(916000,900000,false,city)==WeatherSchedule::Weather);
+    assert(fresh.due(1816999,1800000,false,city)==WeatherSchedule::Weather);
     assert(fresh.due(1817000,1800000,false,city)==WeatherSchedule::Both);
     assert(fresh.due(115000,100000,true,city)==WeatherSchedule::Both);
     auto changed=city;std::snprintf(changed.lat,sizeof(changed.lat),"39.9042");
@@ -57,7 +59,7 @@ int main() {
     assert(interrupted.due(16000,16000,false,city)==WeatherSchedule::Both);
     interrupted.finish(WeatherSchedule::Weather,17000,ESP_OK);
     assert(interrupted.due(18000,18000,false,city)==WeatherSchedule::Air);
-    puts("Home schedule: reuse across visits, 30-minute expiry, bounded weather retry, AQ request ceiling, manual/location refresh, cancelled/partial work PASS");
+    puts("Home schedule: reuse across visits, 15-minute weather / 30-minute AQ expiry, bounded weather retry, AQ request ceiling, manual/location refresh, cancelled/partial work PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='passport-weather-schedule-') as temporary:

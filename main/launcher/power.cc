@@ -3,6 +3,8 @@
 #include "launcher/app_registry.h"
 #include "launcher/battery_guard.h"
 #include "launcher/system_overlay.h"
+#include "apps/reminders/reminder_service.h"
+#include "ui_sfx.h"
 #include "bsp_audio.h"
 #include "bsp_battery.h"
 #include "bsp_button.h"
@@ -21,9 +23,11 @@ namespace {
 
 constexpr char kTag[] = "power";
 constexpr gpio_num_t kWakePin = GPIO_NUM_0;  // shared button ADC node
-constexpr uint8_t kLowBatteryBrightness = 60;
 constexpr uint16_t kButtonRanges[BSP_BTN_COUNT][2] = BSP_BTN_MV_TABLE;
 bool s_hold_hint;
+// Battery warning beep; retried each 10 s gauge poll while an audio app or
+// switch blocks it, then dropped so it cannot hold the shared alarm slot.
+uint8_t s_beep_polls;
 
 void wake_pin_input() {
     const gpio_config_t pin = {
@@ -82,6 +86,9 @@ void power_boot_check(void) {
 void power_off(const char *message) {
     ESP_LOGW(kTag, "Power off: %s", message ? message : "(silent)");
     bsp_audio_set_master_volume(0);
+    // Alarms ignore master volume; stop any ringing before shutting down.
+    reminders::dismiss_for_navigation();
+    ui_sfx_cancel_alarm();
     if (message) {
         show_notice(message, 0);
         vTaskDelay(pdMS_TO_TICKS(1800));
@@ -102,14 +109,24 @@ void power_off(const char *message) {
 
 bool power_battery_tick(void) {
     static battery_guard_t guard;
+    if (s_beep_polls) {
+        // Done (or refused) on a later poll after the request; give up after 3.
+        if (app_registry_sound_notice()) s_beep_polls = 0;
+        else if (!--s_beep_polls && !reminders::alarm_active()) ui_sfx_cancel_alarm();
+    }
     const int soc = bsp_battery_soc();
     switch (battery_guard_step(&guard, soc, bsp_battery_mv())) {
-        case BATTERY_WARN: {
+        case BATTERY_WARN:
+        case BATTERY_CRITICAL: {
+            const bool critical = soc <= BATTERY_CRITICAL_SOC;
             ESP_LOGW(kTag, "Low battery: %d%%", soc);
             // Session-only dimming; the saved brightness returns after a charge and reboot.
-            bsp_display_set_master_brightness(
-                std::min(bsp_display_get_master_brightness(), kLowBatteryBrightness));
-            show_notice("电量低于 10%\n已调暗屏幕，请尽快充电", 4000);
+            bsp_display_set_master_brightness(battery_brightness(soc, bsp_display_get_master_brightness()));
+            show_notice(critical ? "电量低于 5%\n即将自动关机，请立即充电"
+                                 : "电量低于 10%\n已调暗屏幕，请尽快充电", 4000);
+            // Request now; later polls collect completion (or retry a stale one).
+            s_beep_polls = 3;
+            app_registry_sound_notice();
             return false;
         }
         case BATTERY_SHUTDOWN:

@@ -31,6 +31,8 @@ static audio_profile_t s_profile;
 static uint8_t  s_requested_volume = 100;
 static bool s_feedback_owner;
 static uint8_t s_before_feedback_volume;
+// Timer/reminder alerts use a fixed level, even when master volume is 0.
+static bool s_alert_volume;
 static atomic_uchar s_master_volume = 80;
 
 // Settings can change volume while short feedback opens/closes the codec.
@@ -217,6 +219,15 @@ esp_err_t bsp_audio_init_feedback(void) {
     return result;
 }
 
+static uint8_t output_volume(void) {
+    if (s_alert_volume) return s_requested_volume;
+    return bsp_audio_volume_effective(s_requested_volume, s_master_volume);
+}
+
+static int apply_volume(void) {
+    return bsp_audio_volume_apply(s_dev, output_volume(), 100);
+}
+
 void bsp_audio_deinit(void) {
     control_lock();
     if (s_dev) {
@@ -247,6 +258,7 @@ void bsp_audio_deinit(void) {
     if (s_feedback_owner) {
         s_requested_volume = s_before_feedback_volume;
         s_feedback_owner = false;
+        s_alert_volume = false;
     }
     ESP_LOGI(TAG, "audio deinit, heap returned");
     control_unlock();
@@ -296,8 +308,8 @@ static esp_err_t set_format(uint32_t hz, uint8_t bits, uint8_t ch) {
     //   这里只恢复麦克风模拟 PGA 增益和逻辑音量。close/open 会重置 codec 的输出
     //   状态；若不恢复，16kHz 录音切到 24kHz TTS 后可能保持静音。
     if (s_rx) esp_codec_dev_set_in_gain(s_dev, 30.0f);
-    const uint8_t actual_volume = bsp_audio_volume_effective(s_requested_volume, s_master_volume);
-    if (s_tx && bsp_audio_volume_apply(s_dev, s_requested_volume, s_master_volume) != 0) {
+    const uint8_t actual_volume = output_volume();
+    if (s_tx && apply_volume() != 0) {
         ESP_LOGE(TAG, "恢复输出音量失败: %u%%", actual_volume);
         esp_codec_dev_close(s_dev);
         return ESP_FAIL;
@@ -337,8 +349,23 @@ void bsp_audio_set_volume(uint8_t percent) {
     control_lock();
     if (percent > 100) percent = 100;
     s_requested_volume = percent;
-    if (s_opened && s_tx && bsp_audio_volume_apply(s_dev, s_requested_volume, s_master_volume) != 0) {
+    s_alert_volume = false;
+    if (s_opened && s_tx && apply_volume() != 0) {
         ESP_LOGW(TAG, "应用音量设置失败");
+    }
+    control_unlock();
+}
+
+void bsp_audio_set_alert_volume(uint8_t percent) {
+    control_lock();
+    if (percent > 100) percent = 100;
+    // Only short feedback owns alert level; deinit restores normal scaling.
+    if (s_feedback_owner) {
+        s_requested_volume = percent;
+        s_alert_volume = true;
+        if (s_opened && s_tx && apply_volume() != 0) {
+            ESP_LOGW(TAG, "提醒音量设置失败");
+        }
     }
     control_unlock();
 }
@@ -347,11 +374,11 @@ void bsp_audio_set_master_volume(uint8_t percent) {
     control_lock();
     if (percent > 100) percent = 100;
     s_master_volume = percent;
-    if (s_opened && s_tx && bsp_audio_volume_apply(s_dev, s_requested_volume, s_master_volume) != 0) {
+    if (s_opened && s_tx && apply_volume() != 0) {
         ESP_LOGW(TAG, "系统音量设置失败");
     }
     ESP_LOGI(TAG, "主音量=%u%%, 应用=%u%%, 输出=%u%%", s_master_volume,
-             s_requested_volume, bsp_audio_volume_effective(s_requested_volume, s_master_volume));
+             s_requested_volume, output_volume());
     control_unlock();
 }
 

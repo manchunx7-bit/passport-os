@@ -63,6 +63,7 @@ inline void lv_screen_load(lv_obj_t*){}
 inline lv_obj_t *lv_layer_top(){return &mock_top;}
 inline lv_timer_t *lv_timer_create(void(*)(lv_timer_t*),int,void*){++mock_timers;return new lv_timer_t;}
 inline void lv_timer_delete(lv_timer_t *p){assert(mock_timers);--mock_timers;delete p;}
+enum { UI_STATUS_WIFI_X = 18, UI_STATUS_BATTERY_X = 200, UI_STATUS_CONTENT_RIGHT = 150, UI_STATUS_BATTERY_LEFT = 154 };
 struct ui_pixel_battery_t { lv_obj_t *fill=nullptr,*label=nullptr; };
 inline lv_obj_t *ui_pixel_label(lv_obj_t *parent,const char *s,const lv_font_t*,uint32_t){auto *p=lv_label_create(parent);p->text=s;return p;}
 inline void ui_pixel_label_set_text(lv_obj_t *p,const char *s){p->text=s;}

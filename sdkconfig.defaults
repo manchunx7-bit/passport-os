@@ -24,12 +24,12 @@ CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
 CONFIG_LV_COLOR_DEPTH_16=y
 CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_FONT_MONTSERRAT_20=y
-# 首页大时钟(48px 数字)专用。字模约 100KB,全部落在 flash 的 .rodata 并经
-# MMU 直接映射,不占 SRAM。C3 无 PSRAM,任何"把字模读进内存"的做法都不可取。
-CONFIG_LV_FONT_MONTSERRAT_32=y
-CONFIG_LV_FONT_MONTSERRAT_48=y
-CONFIG_LV_FONT_UNSCII_8=y
-CONFIG_LV_FONT_UNSCII_16=y
+# 32px and 48px readouts use digit-only subsets (main/fonts/ui_digits_32.c,
+# pomodoro_digits_48.c); the full fonts would add ~46 KB / ~90 KB of flash.
+# CONFIG_LV_FONT_MONTSERRAT_32 is not set
+# CONFIG_LV_FONT_MONTSERRAT_48 is not set
+# CONFIG_LV_FONT_UNSCII_8 is not set
+# CONFIG_LV_FONT_UNSCII_16 is not set
 # Use the shared ESP-IDF heap for LVGL. Screens are destroyed during app
 # transitions, so their memory is returned to the same heap that Xiaozhi uses
 # for TLS and Opus instead of permanently reserving a 24 KB private pool.
@@ -38,6 +38,8 @@ CONFIG_LV_USE_FS_MEMFS=y
 CONFIG_LV_FS_MEMFS_LETTER=77
 CONFIG_LV_USE_TJPGD=y
 CONFIG_LV_USE_SNAPSHOT=y
+# NetEase music QR login (LVGL qrcodegen; canvas only while the login page shows)
+CONFIG_LV_USE_QRCODE=y
 CONFIG_LV_BUILD_EXAMPLES=n
 CONFIG_LV_BUILD_DEMOS=n
 

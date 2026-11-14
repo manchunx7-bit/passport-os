@@ -6,7 +6,7 @@
 // Foreground audio apps share this storage. Release it only after their worker
 // has stopped using its stack or buffers.
 namespace audio_workspace {
-enum class Owner { None, Radio, Xiaozhi, Muse, MusePairing };
+enum class Owner { None, Radio, Xiaozhi, Muse, MusePairing, Music };
 constexpr std::size_t kRealtimeBytes = 22 * 1024;
 // Same exclusive owner as the realtime stack/frame area. Xiaozhi's Opus
 // half-duplex encoder/decoder, Muse reassembly and Radio compressed FIFO never
@@ -34,6 +34,13 @@ namespace radio {
 constexpr std::size_t kCompressedBytes = 16 * 1024;
 inline std::uint8_t *stations() { return aux() + kCompressedBytes; }
 constexpr std::size_t kStationBytes = kAuxBytes - kCompressedBytes;
+}
+// NetEase music: same realtime layout as Radio; aux = compressed FIFO, then
+// the track/playlist/lyric model laid out by the app (static_assert there).
+namespace music {
+constexpr std::size_t kCompressedBytes = 16 * 1024;
+inline std::uint8_t *model() { return aux() + kCompressedBytes; }
+constexpr std::size_t kModelBytes = kAuxBytes - kCompressedBytes;
 }
 inline std::atomic<Owner> owner{Owner::None};
 inline bool acquire(Owner requested) {

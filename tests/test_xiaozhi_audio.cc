@@ -16,6 +16,17 @@ static void clean(xiaozhi::AudioService &a) {
     assert(audio_workspace::owner==audio_workspace::Owner::None);
 }
 int main() {
+    // The UI snapshot follows PCM, expires on a stalled source, and survives tick
+    // wrap. Publishing/reading it must not construct or allocate an audio service.
+    int16_t meter_pcm[960];for(auto &sample:meter_pcm)sample=4096;
+    xiaozhi::publish_level(reinterpret_cast<uint8_t *>(meter_pcm),sizeof(meter_pcm));
+    assert(xiaozhi::AudioService::VisualLevel()>0&&mock_allocations.empty());
+    mock_time+=181;assert(xiaozhi::AudioService::VisualLevel()==0);
+    mock_time=0xFFFFF0;
+    xiaozhi::publish_level(reinterpret_cast<uint8_t *>(meter_pcm),sizeof(meter_pcm));
+    mock_time+=50;assert(xiaozhi::AudioService::VisualLevel()>0);
+    mock_time+=181;assert(xiaozhi::AudioService::VisualLevel()==0);
+    mock_time=1000;
     auto &a=xiaozhi::AudioService::GetInstance();
     assert(audio_workspace::acquire(audio_workspace::Owner::Radio));
     assert(a.Init()==ESP_ERR_NO_MEM);assert(mock_allocations.empty());
@@ -63,6 +74,14 @@ int main() {
     const size_t count=mock_alloc_order.size();mock_largest=8192;assert(a.StartRecording());
     assert(a.opus_dec_handle_==nullptr&&a.opus_enc_handle_!=nullptr);
     assert(!a.OpenDecoder());
+    // Feed the real recording section, stop on its second read, and inspect the
+    // preceding captured frame. No extra buffers or tasks may be allocated.
+    auto *capture=reinterpret_cast<int16_t *>(a.pcm_scratch_);
+    for(size_t i=0;i<xiaozhi::kEncPcmFrameBytes/2;++i)capture[i]=4096;
+    int reads=0;uint8_t captured_level=0;
+    mock_on_read=[&] {if(++reads==2){captured_level=a.VisualLevel();a.is_recording_=false;}};
+    a.RecordSection();assert(captured_level>0);mock_on_read={};
+    a.is_recording_=true;
     assert(!a.StartPlayback());assert(!a.ReleaseSessionResources());
     assert(live_bytes()==session_bytes+56);
     a.work_=xiaozhi::AudioService::Work::Idle;a.is_recording_=false;
@@ -74,6 +93,13 @@ int main() {
     a.play_drain_=true;mock_on_write=[&a] {a.play_stop_=true;};
     const uint32_t queued=a.PlaybackProgress();a.PlaySection();
     assert(a.PlaybackProgress()!=queued);mock_on_write={};
+    // A successfully written decoded frame publishes its amplitude; mute and
+    // abort cannot keep a phantom waveform running.
+    a.play_stop_=false;a.PushIncomingAudio(frame,sizeof(frame));
+    for(size_t i=0;i<xiaozhi::kMaxPcmFrameBytes/2;++i)capture[i]=4096;
+    a.PlaySection();assert(a.VisualLevel()>0);
+    mock_master_volume=0;a.PushIncomingAudio(frame,sizeof(frame));
+    a.PlaySection();assert(a.VisualLevel()==0);mock_master_volume=100;
     // More than two seconds of draining progress must not be hard-stopped.
     a.work_=xiaozhi::AudioService::Work::Play;a.is_playing_=true;a.play_stop_=false;
     int waits=0;mock_on_wait=[&] {

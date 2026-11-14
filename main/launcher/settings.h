@@ -12,6 +12,11 @@ void settings_tick(void);
 
 // Shared by Settings and app volume keys; applies and persists only volume.
 void settings_set_volume(uint8_t percent);
+// Input-task APIs: persist first; failure leaves the applied setting unchanged.
+bool settings_save_volume(uint8_t percent);
+bool settings_save_brightness(uint8_t percent);
+uint8_t settings_get_volume(void);
+uint8_t settings_get_brightness(void);
 
 extern const passport_app_t g_settings_app;
 

@@ -68,7 +68,6 @@ extern "C" {
 namespace {
 
 constexpr char kTag[] = "app_home";
-LV_FONT_DECLARE(lv_font_unscii_8);
 
 // A8 artwork encodes highlights: keep a dark home scene even in the light theme.
 #define kBg (ui_theme_color_on_dark(UI_COLOR_BG))
@@ -91,9 +90,14 @@ LV_FONT_DECLARE(lv_font_unscii_8);
 // 版式栅格:所有元素都挂在这几个常量上,改一个边距整屏跟着走,不再散落硬编码。
 constexpr int kMargin = 12;
 constexpr int kContentW = 240 - kMargin * 2;  // 216
+constexpr int kInfoLeft = 118; // Visible left edge of time, date and location pin.
+constexpr int kClockSlotOffset[5] = {0, 27, 55, 62, 89};
 
 constexpr int64_t kWeatherFirstDelayMs = 15000;
-constexpr int64_t kWeatherPeriodMs = 1800000;
+// 亮屏时天气每 15 分钟自动刷新(Open-Meteo 当前值本身按 15 分钟更新);
+// 空气质量模型更新慢,保持 30 分钟,不增加 TLS 请求次数。
+constexpr int64_t kWeatherPeriodMs = 900000;
+constexpr int64_t kAirPeriodMs = 1800000;
 // 失败(信号差/热点刚连上)后 2 分钟再试,而不是干等 30 分钟。
 constexpr int64_t kWeatherRetryMs = 120000;
 // 超过 2 小时的天气在风级行改为显示"几小时前更新",户外断网时不把旧数据当实时。
@@ -123,7 +127,8 @@ struct WeatherSchedule {
     }
 
     void finish(unsigned request, int64_t now, esp_err_t result) {
-        const int64_t next = now + (request == Weather && result != ESP_OK ? kWeatherRetryMs : kWeatherPeriodMs);
+        const int64_t next = now + (request == Air ? kAirPeriodMs
+                                    : result != ESP_OK ? kWeatherRetryMs : kWeatherPeriodMs);
         if (request == Weather) weather_due_ms = next;
         else air_due_ms = next;
     }
@@ -177,7 +182,7 @@ bool s_clk_colon_on = false;
 
 lv_obj_t *s_lbl_name = nullptr;
 lv_obj_t *s_lbl_sig = nullptr;
-lv_obj_t *s_wicon_zone = nullptr;    // 天气图标绘制区(天气卡内 22×18)
+lv_obj_t *s_wicon_zone = nullptr;    // Weather glyph: 22×22, drawn without child objects.
 lv_obj_t *s_lbl_city = nullptr;
 lv_obj_t *s_lbl_wtext = nullptr;
 lv_obj_t *s_lbl_temp = nullptr;
@@ -191,11 +196,9 @@ lv_obj_t *s_lbl_footer = nullptr;
 uint8_t s_band_index = 0;
 lv_image_dsc_t s_band_dsc[2];
 
-// ---- 天气像素图标(画在 s_wicon_zone 内,全部是色块) ----
-constexpr int kWiMax = 12;
-lv_obj_t *s_wicon_objs[kWiMax] = {};
-int s_wicon_n = 0;
-lv_obj_t *s_spin[4] = {nullptr, nullptr, nullptr, nullptr};  // 四点 spinner
+// Weather artwork is drawn in the existing zone; no retained blocks or bitmap.
+uint16_t s_wicon_code = 0;
+bool s_wicon_visible = false;
 uint8_t s_spin_phase = 0;
 bool s_wicon_spinning = false;
 bool s_weather_fetching = false;
@@ -276,113 +279,102 @@ lv_obj_t *px_block(lv_obj_t *parent, int x, int y, int w, int h, uint32_t color)
     return o;
 }
 
-lv_obj_t *wicon_block(int x, int y, int w, int h, uint32_t color) {
-    if (s_wicon_n >= kWiMax || !s_wicon_zone) return nullptr;
-    // 磷光单色:原配色里的"亮色/墨"映射为亮绿,灰蓝系映射为暗绿(单色图标仍有层次)
-    color = (color == UI_INK || color == UI_YELLOW || color == UI_ORANGE ||
-             color == 0xFFFFFF)
-                ? kPhos
-                : kPhosDim;
-    lv_obj_t *o = px_block(s_wicon_zone, x, y, w, h, color);
-    s_wicon_objs[s_wicon_n++] = o;
-    return o;
+// Stepped contours share a one-pixel edge and two-pixel accents at native size.
+void wicon_cloud(pixel_scene::Ink &ink, int x, int y) {
+    const uint32_t edge = kPhos;
+    ink.box(x + 8, y, 5, 1, edge);
+    ink.box(x + 6, y + 1, 2, 2, edge);
+    ink.box(x + 13, y + 1, 2, 2, edge);
+    ink.box(x + 3, y + 3, 4, 1, edge);
+    ink.box(x + 15, y + 3, 2, 1, edge);
+    ink.box(x + 1, y + 4, 2, 1, edge);
+    ink.box(x + 17, y + 4, 2, 1, edge);
+    ink.box(x, y + 5, 1, 4, edge);
+    ink.box(x + 19, y + 5, 1, 4, edge);
+    ink.box(x + 1, y + 9, 2, 1, edge);
+    ink.box(x + 17, y + 9, 2, 1, edge);
+    ink.box(x + 3, y + 10, 14, 1, edge);
+    ink.box(x + 4, y + 8, 12, 1, kPhosDim);
+}
+
+void draw_weather_icon_event(lv_event_t *event) {
+    if (!s_wicon_visible) return;
+    pixel_scene::Ink ink(event);
+    if (s_wicon_spinning) {
+        static constexpr int dots[4][2] = {{10, 3}, {16, 9}, {10, 15}, {4, 9}};
+        for (int i = 0; i < 4; ++i)
+            ink.box(dots[i][0], dots[i][1], 3, 3, i == s_spin_phase ? kPhos : kPhosDim);
+        return;
+    }
+    const uint32_t sun = ui_theme_is_multicolor()
+        ? ui_theme_color_on_dark(UI_COLOR_WARNING) : kPhos;
+    const uint32_t water = ui_theme_is_multicolor()
+        ? ui_theme_color_on_dark(UI_COLOR_SECONDARY) : kPhos;
+    const uint16_t code = s_wicon_code;
+    if (code == 0) {
+        // Open solar disc with eight short, balanced rays.
+        ink.box(8, 6, 6, 2, sun); ink.box(8, 14, 6, 2, sun);
+        ink.box(6, 8, 2, 6, sun); ink.box(14, 8, 2, 6, sun);
+        ink.box(10, 1, 2, 3, sun); ink.box(10, 18, 2, 3, sun);
+        ink.box(1, 10, 3, 2, sun); ink.box(18, 10, 3, 2, sun);
+        ink.box(3, 3, 2, 2, sun); ink.box(17, 3, 2, 2, sun);
+        ink.box(3, 17, 2, 2, sun); ink.box(17, 17, 2, 2, sun);
+        return;
+    }
+    if (code == 1 || code == 2) {
+        // The sun peeks above the cloud; keep the foreground outline clear.
+        ink.box(14, 3, 4, 1, sun); ink.box(13, 4, 1, 2, sun);
+        ink.box(18, 4, 1, 3, sun); ink.box(16, 0, 1, 2, sun);
+        ink.box(20, 2, 2, 1, sun); ink.box(20, 6, 2, 1, sun);
+        wicon_cloud(ink, 1, 8);
+        return;
+    }
+    const bool fog = code == 45 || code == 48;
+    const bool rain = (code >= 51 && code <= 67) || (code >= 80 && code <= 82);
+    const bool snow = (code >= 71 && code <= 77) || code == 85 || code == 86;
+    const bool thunder = code >= 95;
+    wicon_cloud(ink, 1, fog || rain || snow || thunder ? 2 : 5);
+    if (fog) {
+        ink.box(3, 16, 11, 1, kPhosDim); ink.box(16, 16, 3, 1, kPhosDim);
+        ink.box(5, 19, 13, 1, kPhosDim);
+    } else if (rain) {
+        for (int x : {5, 11, 17}) {
+            ink.box(x, 16, 1, 2, water); ink.box(x - 1, 18, 1, 2, water);
+        }
+    } else if (snow) {
+        for (int x : {6, 15}) {
+            ink.box(x, 16, 1, 5, water); ink.box(x - 2, 18, 5, 1, water);
+        }
+    } else if (thunder) {
+        ink.box(11, 14, 3, 2, sun); ink.box(9, 16, 4, 2, sun);
+        ink.box(11, 18, 2, 1, sun); ink.box(10, 19, 2, 2, sun);
+    }
 }
 
 void wicon_clear(void) {
-    if (!s_ui_alive.load() || s_screen == nullptr) {
-        s_wicon_n = 0;
-        for (lv_obj_t *&b : s_spin) b = nullptr;
-        s_wicon_spinning = false;
-        return;
-    }
-    for (int i = 0; i < s_wicon_n; ++i) {
-        if (s_wicon_objs[i]) lv_obj_delete(s_wicon_objs[i]);
-        s_wicon_objs[i] = nullptr;
-    }
-    s_wicon_n = 0;
-    for (lv_obj_t *&b : s_spin) b = nullptr;
+    s_wicon_visible = false;
     s_wicon_spinning = false;
-}
-
-// 三段云 + 墨影,可复用在阴/雨/雪/雷/雾图标里
-void wicon_cloud(int x, int y, uint32_t body) {
-    wicon_block(x, y + 6, 18, 5, body);
-    wicon_block(x + 3, y + 3, 9, 5, body);
-    wicon_block(x + 9, y, 8, 5, body);
-    wicon_block(x + 1, y + 11, 16, 2, UI_INK);
-}
-
-void wicon_sun(void) {
-    wicon_block(7, 4, 8, 8, UI_YELLOW);   // 日芯
-    wicon_block(10, 0, 3, 3, UI_ORANGE);  // 四向射线
-    wicon_block(10, 13, 3, 3, UI_ORANGE);
-    wicon_block(2, 7, 3, 3, UI_ORANGE);
-    wicon_block(17, 7, 3, 3, UI_ORANGE);
-    wicon_block(3, 1, 2, 2, UI_YELLOW);   // 斜向光点
-    wicon_block(18, 1, 2, 2, UI_YELLOW);
-    wicon_block(3, 13, 2, 2, UI_YELLOW);
-    wicon_block(18, 13, 2, 2, UI_YELLOW);
-}
-
-void wicon_sun_cloud(void) {
-    wicon_block(13, 0, 7, 7, UI_YELLOW);  // 右上太阳(下半被云压住)
-    wicon_block(20, 2, 2, 2, UI_YELLOW);
-    wicon_cloud(0, 4, 0xFFFFFF);
+    if (s_ui_alive.load() && s_wicon_zone) lv_obj_invalidate(s_wicon_zone);
 }
 
 void weather_icon_draw(uint16_t code) {
-    wicon_clear();
-    if (code == 0) { wicon_sun(); return; }
-    if (code == 1 || code == 2) { wicon_sun_cloud(); return; }
-    if (code == 3) { wicon_cloud(2, 1, 0xB9C4CC); return; }              // 阴
-    if (code == 45 || code == 48) {                                       // 雾
-        wicon_cloud(2, 0, 0xC6CED4);
-        wicon_block(4, 14, 14, 2, UI_SUB);
-        return;
-    }
-    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {       // 雨
-        wicon_cloud(2, 0, 0x9AA7B4);
-        wicon_block(4, 14, 2, 3, UI_SKY_DARK);
-        wicon_block(9, 14, 2, 3, UI_SKY_DARK);
-        wicon_block(14, 14, 2, 3, UI_SKY_DARK);
-        return;
-    }
-    if ((code >= 71 && code <= 77) || code == 85 || code == 86) {         // 雪
-        wicon_cloud(2, 0, 0xD7DEE4);
-        wicon_block(4, 14, 2, 2, 0x8FC7EF);
-        wicon_block(9, 14, 2, 2, 0x8FC7EF);
-        wicon_block(14, 14, 2, 2, 0x8FC7EF);
-        return;
-    }
-    if (code >= 95) {                                                     // 雷
-        wicon_cloud(2, 0, 0x8B98A5);
-        wicon_block(9, 13, 3, 2, UI_YELLOW);
-        wicon_block(8, 15, 2, 2, UI_YELLOW);
-        return;
-    }
-    wicon_cloud(2, 1, 0xB9C4CC);
+    s_wicon_code = code;
+    s_wicon_visible = true;
+    s_wicon_spinning = false;
+    if (s_wicon_zone) lv_obj_invalidate(s_wicon_zone);
 }
 
-// 拉取中的四点 spinner:四个色块轮流点亮,由首页 1s tick 推进
 void weather_spinner_draw(void) {
-    wicon_clear();
-    s_spin[0] = wicon_block(9, 1, 4, 3, UI_INK);
-    s_spin[1] = wicon_block(15, 7, 3, 4, 0xB9C2B0);
-    s_spin[2] = wicon_block(9, 13, 4, 3, 0xB9C2B0);
-    s_spin[3] = wicon_block(4, 7, 3, 4, 0xB9C2B0);
     s_spin_phase = 0;
+    s_wicon_visible = true;
     s_wicon_spinning = true;
+    if (s_wicon_zone) lv_obj_invalidate(s_wicon_zone);
 }
 
 void weather_icon_spin_tick(void) {
-    if (!s_wicon_spinning || !s_ui_alive.load() || s_screen == nullptr) return;
+    if (!s_wicon_spinning || !s_ui_alive.load() || !s_wicon_zone) return;
     s_spin_phase = (s_spin_phase + 1) & 3;
-    for (int i = 0; i < 4; ++i) {
-        if (s_spin[i]) {
-            lv_obj_set_style_bg_color(
-                s_spin[i], lv_color_hex(i == s_spin_phase ? kPhos : kPhosDim), 0);
-        }
-    }
+    lv_obj_invalidate(s_wicon_zone);
 }
 
 // 天气区整体刷新:文字行 + 左侧图标。调用方需已持 LVGL 锁。
@@ -474,6 +466,15 @@ void update_clock_labels() {
         std::snprintf(date_buf, sizeof(date_buf), "等待校时");
     }
 
+    // The leading '1' and unsynchronized dash have one empty pixel column.
+    // Shift the whole clock as a group so its visible ink starts at kInfoLeft,
+    // retaining the existing spacing between digits and colon.
+    const int clock_inset = (hh[0] == '1' || hh[0] == '-') ? kCell : 0;
+    for (int i = 0; i < 5; ++i) {
+        const int x = kInfoLeft + kClockSlotOffset[i] - clock_inset;
+        if (s_clk_slots[i] && lv_obj_get_x(s_clk_slots[i]) != x)
+            lv_obj_set_x(s_clk_slots[i], x);
+    }
     const char digits[4] = {hh[0], hh[1], mm[0], mm[1]};
     const int slot_map[4] = {0, 1, 3, 4};   // 槽 2 是冒号
     for (int i = 0; i < 4; ++i) {
@@ -484,6 +485,12 @@ void update_clock_labels() {
         }
     }
     ui_pixel_label_set_text(s_lbl_date, date_buf);
+    lv_font_glyph_dsc_t first_glyph{};
+    const uint32_t first_codepoint = valid ? static_cast<uint8_t>(date_buf[0]) : 0x7b49; // 等
+    const int date_inset = lv_font_get_glyph_dsc(&buddy_font_16, &first_glyph, first_codepoint, 0)
+        ? first_glyph.ofs_x : 0;
+    // The subset glyph for 等 also has one transparent column inside its box.
+    lv_obj_set_x(s_lbl_date, kInfoLeft - date_inset - (valid ? 0 : 1));
 
     s_clk_colon_on = !s_clk_colon_on;
     for (lv_obj_t *dot : s_clk_colon) {
@@ -667,8 +674,19 @@ void draw_passport_details(lv_event_t *event) {
     pixel_scene::Ink ink(event);
     // Open portrait and perforated seam replace retained decoration objects.
     const uint32_t surface = ui_theme_color_on_dark(UI_COLOR_SURFACE);
-    ink.box(116, 28, 118, 93, surface);
+    ink.box(116, 32, 118, 93, surface);
     ink.box(116, 128, 118, 108, surface);
+    // 9x12 outlined map pin: stepped crown, open center and tapered tip.
+    // Center y=110.5 matches the visible city glyphs (y=104..117).
+    // Draw with the page, avoiding two retained decoration objects.
+    ink.box(kInfoLeft + 2, 105, 5, 1, kPhos);
+    ink.box(kInfoLeft + 1, 106, 1, 1, kPhos); ink.box(kInfoLeft + 7, 106, 1, 1, kPhos);
+    ink.box(kInfoLeft + 0, 107, 1, 4, kPhos); ink.box(kInfoLeft + 8, 107, 1, 4, kPhos);
+    ink.box(kInfoLeft + 3, 108, 3, 2, kPhosDim);
+    ink.box(kInfoLeft + 1, 111, 1, 1, kPhos); ink.box(kInfoLeft + 7, 111, 1, 1, kPhos);
+    ink.box(kInfoLeft + 2, 112, 1, 1, kPhos); ink.box(kInfoLeft + 6, 112, 1, 1, kPhos);
+    ink.box(kInfoLeft + 3, 113, 1, 1, kPhos); ink.box(kInfoLeft + 5, 113, 1, 1, kPhos);
+    ink.box(kInfoLeft + 4, 114, 1, 3, kPhos);
     for (int y = 34; y < 234; y += 8) ink.box(110, y, 1, 3, kPhosBorder);
     ink.box(14, 32, 14, 2, kPhosBorder); ink.box(14, 32, 2, 12, kPhosBorder);
     ink.box(88, 158, 14, 2, kPhosBorder); ink.box(100, 148, 2, 12, kPhosBorder);
@@ -691,8 +709,8 @@ void create_ui() {
         ui_pixel_bg_color(top, kBg);
         lv_obj_set_style_border_color(top, lv_color_hex(kPhosBorder), 0);
     }
-    ui_pixel_wifi_bars_create(s_screen, 12, 18, s_wifi_bars);
-    s_batt = ui_pixel_battery_create(s_screen, 206, 6, kPhos, &lv_font_montserrat_14);
+    ui_pixel_wifi_bars_create(s_screen, UI_STATUS_WIFI_X, 18, s_wifi_bars);
+    s_batt = ui_pixel_battery_create(s_screen, UI_STATUS_BATTERY_X, 6, kPhos, &lv_font_montserrat_14);
 
     lv_obj_t *passport = ui_pixel_label(s_screen, "PASSPORT", &lv_font_montserrat_14, kPhosDim);
     lv_obj_set_pos(passport, 42, 4);
@@ -730,10 +748,9 @@ void create_ui() {
     lv_label_set_text(s_lbl_name, "未设置姓名");
     lv_label_set_text(s_lbl_sig, "未设置签名");
 
-    // ---- 右上时钟区 (x114..234, y26..124): 点阵时钟 + 日期 + 城市 (舒适呼吸间距) ----
-    static const int slot_x[5] = {118, 145, 173, 180, 207};
+    // Clock sits 14px below the status bar; date and city form a compact group.
     for (int i = 0; i < 5; ++i) {
-        s_clk_slots[i] = px_container(s_screen, slot_x[i], 32,
+        s_clk_slots[i] = px_container(s_screen, kInfoLeft + kClockSlotOffset[i], 40,
                                       i == 2 ? 4 : kDigitW, kClockH);
         if (i != 2) lv_obj_add_event_cb(s_clk_slots[i], draw_digit_event,
                                        LV_EVENT_DRAW_MAIN, &s_clk_slot_char[i]);
@@ -741,32 +758,31 @@ void create_ui() {
     s_clk_colon[0] = px_block(s_clk_slots[2], 0, 7, 4, 4, kClock);
     s_clk_colon[1] = px_block(s_clk_slots[2], 0, 21, 4, 4, kClock);
 
-    // 日期下移至 y=76，离开大时钟底部拉开 9px 舒适间距
+    // Keep 6px between the 35px clock and its date line.
     s_lbl_date = make_label(s_screen, &buddy_font_16, kPhos, LV_TEXT_ALIGN_LEFT);
     lv_obj_set_width(s_lbl_date, 114);
-    lv_obj_set_pos(s_lbl_date, 120, 77);
+    lv_obj_set_pos(s_lbl_date, kInfoLeft, 81);
 
-    // 定位 pin + 城市名 (y=98..114)
-    px_block(s_screen, 118, 102, 6, 6, kPhos);
-    px_block(s_screen, 120, 108, 2, 3, kPhos);
+    // Four clear pixels separate the outlined pin from the city name.
     s_lbl_city = make_label(s_screen, &buddy_font_16, kPhosDim, LV_TEXT_ALIGN_LEFT);
-    lv_obj_set_pos(s_lbl_city, 128, 98);
-    lv_obj_set_size(s_lbl_city, 96, 20);
+    lv_obj_set_pos(s_lbl_city, 131, 102);
+    lv_obj_set_size(s_lbl_city, 93, 20);
     lv_label_set_long_mode(s_lbl_city, LV_LABEL_LONG_MODE_DOTS);
 
     // ---- 右下环境气象区 (x114..234, y124..236: 经典三行大字版式) ----
     // 行 1: 天气图标 + 大温度 + 天气状态
-    s_wicon_zone = px_container(s_screen, 115, 137, 22, 18);
+    s_wicon_zone = px_container(s_screen, 116, 135, 22, 22);
+    lv_obj_add_event_cb(s_wicon_zone, draw_weather_icon_event, LV_EVENT_DRAW_MAIN, nullptr);
     s_lbl_temp = make_label(s_screen, &lv_font_montserrat_20, kTemperature, LV_TEXT_ALIGN_LEFT);
-    lv_obj_set_pos(s_lbl_temp, 138, 133);
+    lv_obj_set_pos(s_lbl_temp, 142, 134);
     lv_obj_set_size(s_lbl_temp, 42, 24);
     lv_label_set_long_mode(s_lbl_temp, LV_LABEL_LONG_MODE_CLIP);
 
     s_lbl_wtext = make_label(s_screen, &buddy_font_16, kWeatherAccent, LV_TEXT_ALIGN_LEFT);
     // Three full-width Chinese glyphs need 48px even without tracking.
     // Bound the height as well: DOTS on a content-height label can still wrap.
-    lv_obj_set_pos(s_lbl_wtext, 182, 136);
-    lv_obj_set_size(s_lbl_wtext, 52, 20);
+    lv_obj_set_pos(s_lbl_wtext, 186, 137);
+    lv_obj_set_size(s_lbl_wtext, 48, 20);
     lv_obj_set_style_text_letter_space(s_lbl_wtext, 0, 0);
     lv_label_set_long_mode(s_lbl_wtext, LV_LABEL_LONG_MODE_DOTS);
 
@@ -1056,9 +1072,11 @@ void home_task(void *arg) {
             }
         }
 
-        // 首次进入延迟 15s;跨页面复用 30 分钟样本,手动刷新或换城市立即请求。
+        // 首次进入延迟 15s;跨页面复用样本,到期自动刷新,手动刷新或换城市立即请求。
+        // 熄屏期间不发请求(省电);亮屏后若已到期,下一轮循环立即刷新。
         home_profile_get(&prof);
-        const unsigned requests = connected ? s_weather_schedule.due(now_ms, start_ms, s_force_weather.load(), prof) : 0;
+        const unsigned requests = connected && app_registry_screen_is_on()
+            ? s_weather_schedule.due(now_ms, start_ms, s_force_weather.load(), prof) : 0;
         if (requests) {
             s_force_weather.store(false);
             s_weather_schedule.begin(requests, now_ms, prof);
@@ -1234,10 +1252,7 @@ void home_stop() {
     s_lbl_name = nullptr;
     s_lbl_sig = nullptr;
     s_wicon_zone = nullptr;
-    // 屏幕删除时天气图标块已随之销毁,这里只清登记状态,不能再 lv_obj_delete
-    for (lv_obj_t *&o : s_wicon_objs) o = nullptr;
-    s_wicon_n = 0;
-    for (lv_obj_t *&b : s_spin) b = nullptr;
+    s_wicon_visible = false;
     s_wicon_spinning = false;
     s_lbl_city = nullptr;
     s_lbl_wtext = nullptr;

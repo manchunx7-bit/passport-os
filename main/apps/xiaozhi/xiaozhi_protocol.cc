@@ -1,10 +1,13 @@
 #include "apps/xiaozhi/xiaozhi_protocol.h"
 #include "apps/xiaozhi/xiaozhi_audio.h"
 #include "apps/xiaozhi/xiaozhi_store.h"
+#include "apps/reminders/reminder_service.h"
+#include "device_control.h"
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <esp_crt_bundle.h>
 #include <esp_random.h>
+#include <esp_heap_caps.h>
 #include <arpa/inet.h>
 #include <cJSON.h>
 #include <cstring>
@@ -56,7 +59,6 @@ std::string LoadOrCreateClientId() {
 
 Protocol::Protocol() {
     LoadIdentity();
-    rx_text_[0] = '\0';
 }
 
 void Protocol::LoadIdentity() {
@@ -78,6 +80,8 @@ Protocol::~Protocol() {
         esp_websocket_client_destroy(client_);
         client_ = nullptr;
     }
+    if (mcp_queue_) vQueueDelete(mcp_queue_);
+    if (rx_text_) heap_caps_free(rx_text_);
 }
 
 const char *Protocol::StateName(State s) {
@@ -94,7 +98,7 @@ const char *Protocol::StateName(State s) {
 }
 
 bool Protocol::Start(const std::string &url, const std::string &token, int version) {
-    if (client_ != nullptr) {
+    if (client_ != nullptr || mcp_queue_ || rx_text_) {
         Stop();
     }
 
@@ -108,6 +112,11 @@ bool Protocol::Start(const std::string &url, const std::string &token, int versi
     needs_restart_ = false;
     ResetRx();
 
+    rx_text_=static_cast<char*>(heap_caps_malloc(kMaxTextMessage,MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
+    if (!rx_text_) { SetState(State::Error); return false; }
+    rx_text_[0]='\0';
+    if (!mcp_queue_) mcp_queue_ = xQueueCreate(3, sizeof(McpRequest));
+    if (!mcp_queue_) { SetState(State::Error); return false; }
     SetState(State::Connecting);
 
     esp_websocket_client_config_t ws_cfg = {};
@@ -158,17 +167,28 @@ bool Protocol::Start(const std::string &url, const std::string &token, int versi
 }
 
 void Protocol::Stop() {
+    device_control::cancel_session();
     // 注意：绝不能从 websocket 任务/回调里调用 —— 组件会直接拒绝
     // （"Client cannot be stopped from websocket task"）并返回失败。
     // Suppress terminal callbacks from our own stop; callbacks never destroy
     // the client. Join its worker before clearing the old session's mailbox.
     needs_restart_ = true;
     if (client_) {
+        // The worker only notices stop between 1 s read polls. A PING makes the
+        // server's PONG wake that poll, saving most of a second on app switch.
+        if (esp_websocket_client_is_connected(client_))
+            esp_websocket_client_send_with_opcode(client_, WS_TRANSPORT_OPCODES_PING, nullptr, 0,
+                                                  pdMS_TO_TICKS(100));
         esp_websocket_client_stop(client_);      // 内部等待接收任务退出
         esp_websocket_client_destroy(client_);
         client_ = nullptr;
     }
     hello_ok_ = false;
+    if (mcp_queue_) { vQueueDelete(mcp_queue_); mcp_queue_ = nullptr; }
+    if (rx_text_) {heap_caps_free(rx_text_);rx_text_=nullptr;}
+    for (auto &slot : rejected_mcp_ids_) slot = -1;
+    mcp_reply_cursor_=0;
+    for (auto &reply:mcp_replies_) {reply.id=-1; std::string{}.swap(reply.response);}
     std::string{}.swap(session_id_);
     std::string{}.swap(url_);
     // Identity remains persisted in NVS. These first-session string buffers
@@ -233,7 +253,7 @@ bool Protocol::SendJson(const std::string &json) {
     if (!IsConnected()) return false;
     int ret = esp_websocket_client_send_text(client_, json.c_str(), (int)json.size(),
                                              kSendTimeoutMs);
-    if (ret < 0) {
+    if (ret != static_cast<int>(json.size())) {
         ESP_LOGW(TAG, "send_text failed (%d bytes)", (int)json.size());
         return false;
     }
@@ -347,12 +367,12 @@ void Protocol::OnConnected() {
     Publish(EvType::Connected, nullptr);
 
     // 官方 hello 报文：version / features{mcp} / transport / audio_params
-    // 本机没有实现 MCP 工具（IoT 能力），因此如实声明 mcp:false —— 声明 true 会让
-    // 服务端把工具调用请求推给我们，而我们无法回应，白白干扰对话。
+    // Tool requests are queued by the websocket callback and executed by the
+    // controller; flash writes must not block reception of audio packets.
     // frame_duration 如实上报本机编码帧长（60ms，见 xiaozhi_audio.h 的说明）。
     char hello[256];
     std::snprintf(hello, sizeof(hello),
-                  "{\"type\":\"hello\",\"version\":%d,\"features\":{\"mcp\":false},"
+                  "{\"type\":\"hello\",\"version\":%d,\"features\":{\"mcp\":true},"
                   "\"transport\":\"websocket\",\"audio_params\":{\"format\":\"opus\","
                   "\"sample_rate\":16000,\"channels\":1,\"frame_duration\":%d}}",
                   version_, kEncFrameDurationMs);
@@ -428,9 +448,17 @@ void Protocol::HandleData(const esp_websocket_event_data_t *d) {
     }
 
     if (d->op_code == 0x01 || (d->op_code == 0x00 && rx_text_len_ > 0)) {
+        if (!rx_text_) return;
         if (d->op_code == 0x01 && off == 0) {
             rx_text_len_ = 0;
             rx_text_expect_ = total;
+        }
+        if (total >= kMaxTextMessage || rx_text_len_ + n >= kMaxTextMessage) {
+            // The id may sit after the cut-off params; a guessed id could answer
+            // the wrong request, so the server's own timeout handles this one.
+            if (off == 0) ESP_LOGW(TAG, "Text message of %u bytes exceeds %u, dropped", (unsigned)total, (unsigned)kMaxTextMessage);
+            rx_text_len_ = 0;
+            return;
         }
         size_t space = kMaxTextMessage - 1 - rx_text_len_;
         size_t copy = (n > space) ? space : n;
@@ -528,6 +556,27 @@ void Protocol::DispatchText() {
         if (cJSON_IsString(txt) && txt->valuestring && txt->valuestring[0]) {
             Publish(EvType::AiSentence, txt->valuestring);
         }
+    } else if (std::strcmp(t, "mcp") == 0) {
+        const cJSON *p = cJSON_GetObjectItem(root, "payload");
+        const cJSON *id = cJSON_GetObjectItem(p, "id");
+        const cJSON *method = cJSON_GetObjectItem(p, "method");
+        const bool valid_id = cJSON_IsNumber(id) && id->valuedouble >= 0 && id->valuedouble <= INT32_MAX &&
+            id->valuedouble == id->valueint;
+        if (mcp_queue_ && valid_id && !(cJSON_IsString(method) && std::strlen(method->valuestring) < 24)) {
+            RejectMcp(id->valueint);  // an answerable request with an unusable method
+        } else if (mcp_queue_ && valid_id) {
+            McpRequest request{}; request.id = id->valueint;
+            std::strcpy(request.method, method->valuestring);
+            const cJSON *params = cJSON_GetObjectItem(p, "params");
+            // initialize capabilities are not needed for text reminders.
+            char *printed = params && std::strcmp(request.method,"initialize") ? cJSON_PrintUnformatted(params) : nullptr;
+            const char *value = printed ? printed : "{}";
+            if (std::strlen(value) < sizeof(request.params)) {
+                std::strcpy(request.params,value);
+                if (xQueueSend(mcp_queue_,&request,0) != pdTRUE) RejectMcp(request.id);
+            } else RejectMcp(request.id);
+            cJSON_free(printed);
+        }
     } else if (std::strcmp(t, "iot") == 0) {
         ESP_LOGD(TAG, "iot message ignored");
     } else if (std::strcmp(t, "alert") == 0 || std::strcmp(t, "error") == 0) {
@@ -547,6 +596,51 @@ void Protocol::DispatchText() {
     }
 
     cJSON_Delete(root);
+}
+
+void Protocol::RejectMcp(int32_t id) {
+    for (auto &slot : rejected_mcp_ids_) {
+        int32_t empty = -1;
+        if (slot.compare_exchange_strong(empty, id)) return;
+    }
+    ESP_LOGW(TAG, "MCP id=%ld refused while the rejection backlog is full", (long)id);
+}
+
+bool Protocol::ProcessMcp() {
+    if (!mcp_queue_ || !HandshakeDone() || NeedsRestart()) return false;
+    int32_t rejected=-1;
+    for (auto &slot : rejected_mcp_ids_) if ((rejected=slot.exchange(-1))>=0) break;
+    if (rejected>=0) {
+        SendJson("{\"type\":\"mcp\",\"payload\":{\"jsonrpc\":\"2.0\",\"id\":"+
+            std::to_string(rejected)+",\"error\":{\"code\":-32602,\"message\":\"Device queue or argument limit exceeded; not executed\"}}}");
+        return true;
+    }
+    McpRequest request{};
+    if (xQueueReceive(mcp_queue_,&request,0)!=pdTRUE) return false;
+    uint32_t hash=2166136261u;
+    for(const char *s : {request.method,request.params}) for(;*s;++s) hash=(hash^static_cast<unsigned char>(*s))*16777619u;
+    const uint64_t token=((static_cast<uint64_t>(request.id)+1)<<32)|hash;
+    for (const auto &reply:mcp_replies_) {
+        if (reply.id==request.id && reply.hash==hash && !reply.response.empty()) {
+            const bool sent=SendJson(reply.response);
+            device_control::response_sent(token,sent);return true;
+        }
+    }
+    bool error=false;
+    const std::string result=reminders::mcp_result(request.method,request.params,&error,token);
+    std::string response="{\"session_id\":\""+session_id_+"\",\"type\":\"mcp\",\"payload\":{\"jsonrpc\":\"2.0\",\"id\":"+
+        std::to_string(request.id)+(error?",\"error\":":",\"result\":")+result+"}}";
+    // Cache four recent calls even after send failure. Interleaved read/status
+    // requests must not immediately make a repeated relative adjustment run twice.
+    // Discovery pages are pure and do not consume this bounded call cache.
+    if (!std::strcmp(request.method,"tools/call")) {
+        auto &reply=mcp_replies_[mcp_reply_cursor_++ % 4];
+        reply.id=request.id;reply.hash=hash;reply.response=response;
+    }
+    const bool sent=SendJson(response);
+    device_control::response_sent(token,sent);
+    ESP_LOGI(TAG,"MCP %s response_sent=%d",request.method,sent);
+    return true;
 }
 
 } // namespace xiaozhi

@@ -32,6 +32,7 @@ esp_err_t RadioSource::event(esp_http_client_event_t *event) {
     if (event->event_id != HTTP_EVENT_ON_HEADER || !event->user_data || !event->header_key || !event->header_value) return ESP_OK;
     auto &self = *static_cast<RadioSource *>(event->user_data);
     if (!strcasecmp(event->header_key, "Content-Type")) std::snprintf(self.mime_, sizeof(self.mime_), "%s", event->header_value);
+    if (!strcasecmp(event->header_key, "Content-Length")) self.content_length_ = std::strtoul(event->header_value, nullptr, 10);
     if (!strcasecmp(event->header_key, "icy-metaint")) {
         const unsigned long n = std::strtoul(event->header_value, nullptr, 10);
         if (n <= 16 * 1024 * 1024) self.icy_interval_ = n;
@@ -42,18 +43,25 @@ bool RadioSource::request(const char *url) {
     close_http();
     if (cancelled() || (!radio_hls::starts(url, "http://") && !radio_hls::starts(url, "https://"))) return false;
     esp_http_client_config_t cfg{};
-    cfg.url = url; cfg.timeout_ms = 6000; /* phone hotspot / 4G first byte */ cfg.buffer_size = 1024; cfg.buffer_size_tx = 512;
-    cfg.user_agent = "AI-Passport-Radio/0.2.0-rc.54";
+    cfg.url = url; cfg.timeout_ms = 6000; /* phone hotspot / 4G first byte */ cfg.buffer_size = 1024; cfg.buffer_size_tx = tx_bytes_;
+    cfg.user_agent = agent_;
     cfg.crt_bundle_attach = esp_crt_bundle_attach;
     cfg.event_handler = event; cfg.user_data = this; cfg.keep_alive_enable = true;
     client_ = esp_http_client_init(&cfg);
     if (!client_) { oom_ = true; return false; }
     esp_http_client_set_header(client_, "Accept-Encoding", "identity");
     esp_http_client_set_header(client_, "Icy-MetaData", "0");
+    if (referer_) esp_http_client_set_header(client_, "Referer", referer_);
+    if (range_start_) {
+        char range[32];
+        std::snprintf(range, sizeof(range), "bytes=%lu-", static_cast<unsigned long>(range_start_));
+        esp_http_client_set_header(client_, "Range", range);
+    }
     for (unsigned redirects = 0; redirects <= 4 && !cancelled(); ++redirects) {
-        mime_[0] = 0; icy_interval_ = 0;
+        mime_[0] = 0; icy_interval_ = 0; content_length_ = 0;
         if (esp_http_client_open(client_, 0) != ESP_OK || esp_http_client_fetch_headers(client_) < 0) return false;
         const int status = esp_http_client_get_status_code(client_);
+        status_ = status;
         if (status >= 200 && status < 300) return true;
         if (status != 301 && status != 302 && status != 303 && status != 307 && status != 308) {
             ESP_LOGW(kTag, "HTTP status %d", status); return false;
@@ -128,7 +136,8 @@ bool RadioSource::next_segment() {
     }
     return false;
 }
-bool RadioSource::open(const char *url) {
+bool RadioSource::open(const char *url, uint32_t offset) {
+    range_start_ = offset;
     if (!request(url)) return false;
     if (std::strstr(url, ".m3u8") || strcasestr(mime_, "mpegurl")) {
         static_assert(sizeof(Hls) <= kHlsWorkspaceBytes);
