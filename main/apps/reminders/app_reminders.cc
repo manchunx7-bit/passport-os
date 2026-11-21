@@ -146,5 +146,6 @@ const passport_app_t g_reminders_app={
     .id=APP_ID_REMINDERS,.name="备忘提醒",.en_name="REMINDERS",
     .desc="用小智记下事项\n到点响铃提醒",.tag="本地提醒",.theme_color=0x8CF5A6,
     .init=nullptr,.start=reminders::start,.stop=reminders::stop,.on_key=reminders::key,
-    .prepare_stop=nullptr,.on_back=reminders::back
+    .prepare_stop=nullptr,.on_back=reminders::back,
+    .key="reminders",.in_launcher=true,.openable=true,.allow_toast=true
 };

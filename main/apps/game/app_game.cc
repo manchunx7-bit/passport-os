@@ -784,5 +784,6 @@ const passport_app_t g_game_app = {
     .stop = game_stop,
     .on_key = game_on_key,
     .prepare_stop = game_prepare_stop,
+    .key = "game", .in_launcher = true, .openable = true,
 };
 }

@@ -20,6 +20,31 @@ extern "C" const passport_app_t *app_registry_get_by_id(passport_app_id_t id){
     static passport_app_t app{};return id>APP_ID_LAUNCHER&&id<APP_ID_COUNT?&app:nullptr;
 }
 extern "C" void app_registry_switch_to(passport_app_id_t id){++switches;foreground=id;}
+extern "C" bool app_registry_enabled(passport_app_id_t id){return id<APP_ID_COUNT;}
+static passport_app_t *openable_apps(){
+    static const passport_app_id_t ids[]={APP_ID_XIAOZHI,APP_ID_RADIO,APP_ID_NETEASE,APP_ID_VOICE,
+        APP_ID_MUSE,APP_ID_POMODORO,APP_ID_STOPWATCH,APP_ID_REMINDERS,APP_ID_LISTS,APP_ID_TETRIS,
+        APP_ID_GAME,APP_ID_SOUND_JUMP,APP_ID_SETTINGS,APP_ID_HOME};
+    static const char *keys[]={"xiaozhi","radio","music","voice","muse","pomodoro","stopwatch",
+        "reminders","lists","tetris","game","sound_jump","settings","home"};
+    static passport_app_t apps[sizeof(ids)/sizeof(ids[0])];
+    for(size_t i=0;i<sizeof(ids)/sizeof(ids[0]);++i){
+        apps[i]=passport_app_t{};
+        apps[i].id=ids[i];
+        apps[i].key=keys[i];
+    }
+    return apps;
+}
+extern "C" size_t app_registry_openable_count(){return 14;}
+extern "C" const passport_app_t *app_registry_get_openable(size_t index){
+    return index<app_registry_openable_count()?&openable_apps()[index]:nullptr;
+}
+extern "C" const char *app_registry_key(passport_app_id_t id){
+    if(id==APP_ID_LAUNCHER)return "launcher";
+    for(size_t i=0;i<app_registry_openable_count();++i)
+        if(openable_apps()[i].id==id)return openable_apps()[i].key;
+    return "unknown";
+}
 namespace xiaozhi {void ui_set_volume(unsigned value){ui_volume=value;}}
 static pomodoro_t voice_timer=POMODORO_INITIALIZER;
 bool pomodoro_control(pomodoro_action_t action,uint8_t phase,PomodoroSnapshot *out,pomodoro_command_result_t *result){
@@ -74,6 +99,13 @@ static std::string invoke(const char *name,const char *args,uint64_t token=1){
 }
 int main(){
     using namespace device_control;
+    // The open schema is generated from the plugin registry, so hidden pages
+    // and disabled optional apps never leak into the model-facing tool.
+    const std::string open_schema=tool_schema(4)?tool_schema(4):"";
+    assert(open_schema.find("\"name\":\"self.application.open\"")!=std::string::npos);
+    assert(open_schema.find("launcher=应用列表")!=std::string::npos);
+    assert(open_schema.find("music=music")!=std::string::npos);
+    assert(open_schema.find("wifi")==std::string::npos);
     mock_delay_hook=poll;
     auto answer=invoke("self.audio.set_volume",R"({"percent":55})");
     assert(answer.find("saved\\\":true")!=std::string::npos);

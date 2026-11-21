@@ -374,4 +374,6 @@ const passport_app_t g_radio_app = {
     .stop = radio_app_stop,
     .on_key = radio_app_on_key,
     .prepare_stop = radio_app_prepare_stop,
+    .key = "radio", .in_launcher = true, .openable = true,
+    .streaming = true, .heap_largest_kb = 24, .heap_free_kb = 48,
 };

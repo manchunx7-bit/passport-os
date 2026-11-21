@@ -1176,4 +1176,6 @@ const passport_app_t g_netease_app = {
     .on_key = netease::app_on_key,
     .prepare_stop = netease::app_prepare_stop,
     .on_back = netease::app_on_back,
+    .key = "music", .in_launcher = true, .openable = true,
+    .streaming = true, .heap_largest_kb = 24, .heap_free_kb = 48,
 };

@@ -168,4 +168,5 @@ extern const passport_app_t g_stopwatch_app = {
     .start = start,
     .stop = stop,
     .on_key = on_key,
+    .key = "stopwatch", .in_launcher = true, .openable = true, .allow_toast = true,
 };

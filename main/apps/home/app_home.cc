@@ -1392,4 +1392,5 @@ const passport_app_t g_home_app = {
     .stop = home_stop,
     .on_key = home_on_key,
     .prepare_stop = home_prepare_stop,
+    .key = "home", .in_launcher = false, .openable = true, .allow_toast = true,
 };

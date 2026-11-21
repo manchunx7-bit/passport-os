@@ -55,8 +55,14 @@ with tempfile.TemporaryDirectory(prefix='passport-control-') as temporary:
     timer_object=Path(temporary)/'pomodoro-core.o'
     subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-g','-fsanitize=address,undefined',
                     '-Imain','-c','main/apps/pomodoro/pomodoro_core.c','-o',str(timer_object)],cwd=root,check=True)
+    # Keep vendored cJSON as C: newer Apple SDKs deprecate its sprintf use and
+    # the C++ driver's diagnostics differ from the firmware toolchain.
+    cjson_object=Path(temporary)/'cjson.o'
+    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-deprecated-declarations',
+                    '-g','-fsanitize=address,undefined',
+                    '-Itests/vendor/cjson','-c','tests/vendor/cjson/cJSON.c','-o',str(cjson_object)],cwd=root,check=True)
     subprocess.run(['c++','-std=c++20','-Wall','-Wextra','-Werror','-Wno-misleading-indentation',
                     '-g','-fsanitize=address,undefined','-Itests/reminder_mocks','-Itests/vendor/cjson',
-                    '-Imain','-Icomponents/bsp/include',str(source),'tests/vendor/cjson/cJSON.c',
+                    '-Imain','-Icomponents/bsp/include',str(source),str(cjson_object),
                     str(timer_object),'-o',str(target)],cwd=root,check=True)
     subprocess.run([str(target)],cwd=root,check=True)

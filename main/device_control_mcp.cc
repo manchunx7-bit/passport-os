@@ -1,4 +1,5 @@
 #include "device_control.h"
+#include "launcher/app_registry.h"
 #include "apps/netease/netease_voice_search.h"
 #include "apps/radio/radio_catalog.h"
 #include <apps/xiaozhi/xiaozhi_ui.h>
@@ -14,27 +15,49 @@ R"({"name":"self.pomodoro.control","description":"Control or query the device's 
 R"({"name":"self.device.get_status","description":"Read this device's saved speaker volume, screen brightness and current app. Volume and brightness are percentages. Use the actual tool result; do not guess device state.","inputSchema":{"type":"object","properties":{}}})",
 R"({"name":"self.audio.set_volume","description":"Change AND persist this device's master speaker volume. Use exactly one of percent (absolute 0..100) or delta (signed percentage points -100..100). For louder/quieter without an amount use delta +10/-10. Zero mutes speech and media; timer and reminder alarms still ring at their fixed alert level. Only claim saved on saved=true; report the returned volume_percent. No external player or server setting is needed.","inputSchema":{"type":"object","properties":{"percent":{"type":"integer","minimum":0,"maximum":100},"delta":{"type":"integer","minimum":-100,"maximum":100}}}})",
 R"({"name":"self.screen.set_brightness","description":"Change AND persist this device's screen brightness. Use exactly one of percent (absolute 10..100) or delta (signed percentage points -100..100). For brighter/dimmer without an amount use delta +10/-10. Values clamp to 10..100 to keep the display readable. Only claim saved on saved=true; report brightness_percent. Survives reboot and screen sleep/wake.","inputSchema":{"type":"object","properties":{"percent":{"type":"integer","minimum":10,"maximum":100},"delta":{"type":"integer","minimum":-100,"maximum":100}}}})",
-R"({"name":"self.application.open","description":"Open a built-in device app on explicit request. music=网易云音乐; radio=城市收音机; reminders=备忘提醒; lists=文字清单; pomodoro=番茄时钟; settings=设置; home=首页; launcher=应用列表; stopwatch=秒表; tetris=俄罗斯方块; sound_jump=声音跳一跳; game=你在狗叫什么; muse=Muse; voice=随身AI语音; xiaozhi=小智. Ask which app if ambiguous. Opens its screen only. Switching exits this Xiaozhi conversation after the tool reply; do not promise continued background voice control.","inputSchema":{"type":"object","properties":{"app":{"type":"string","enum":["music","radio","reminders","lists","pomodoro","settings","home","launcher","stopwatch","tetris","sound_jump","game","muse","voice","xiaozhi"]}},"required":["app"]}})",
+nullptr,  // self.application.open is built from the plugin registry at call time
 R"({"name":"self.music.search","description":"Search the user's own NetEase Cloud Music (网易云音乐) library on THIS device while staying in this conversation. Call it FIRST for any request naming a song or an artist, and NEVER use search_music or any built-in cloud music tool instead. Returns up to 5 results (song_id, name, artist) in relevance order. If the first result matches the request (title, and singer when given), immediately call self.music.play with source=search, the same query and its song_id, and tell the user which song and singer will play. Only if several versions are equally plausible (original/live/cover) and the user gave no hint, briefly ask which one. NetEase lacks some artists' originals (e.g. 周杰伦): then say only a cover is available and play it if the user agrees.","inputSchema":{"type":"object","properties":{"query":{"type":"string","maxLength":20}},"required":["query"]}})",
 R"({"name":"self.music.play","description":"Play music on THIS device from the user's own logged-in NetEase Cloud Music (网易云音乐) account, which has the user's full library and membership. For EVERY request to play a song, an artist or music use this tool (after self.music.search for a song or artist) and NEVER search_music, play_music or any built-in cloud music tool. source=search: the searched query plus song_id of the chosen result; the other results follow. source=favorites: 我喜欢的音乐; daily: 每日推荐; playlist: the user's own or saved playlist, or a chart 热歌榜/新歌榜/飙升榜/原创榜, given as name. shuffle=true for 随机播放. stop_after_minutes pauses playback later, e.g. 半小时后停 = 30. Exits this Xiaozhi conversation after the reply; open Xiaozhi again for more voice control. Except for a chosen search result the playing song is unknown: do not name one. Favorites, daily and personal playlists need the device logged in.","inputSchema":{"type":"object","properties":{"source":{"type":"string","enum":["search","favorites","daily","playlist"]},"query":{"type":"string","maxLength":20},"song_id":{"type":"integer","minimum":1},"name":{"type":"string","maxLength":20},"shuffle":{"type":"boolean"},"stop_after_minutes":{"type":"integer","minimum":1,"maximum":180}},"required":["source"]}})",
 R"({"name":"self.radio.play","description":"Play live internet radio for a Chinese city or province in this device's 城市收音机 app, e.g. 打开北京的电台 = city 北京. station: optional keywords of a station name such as 交通 or 音乐; otherwise the most popular local station plays. stop_after_minutes pauses the radio later, e.g. 半小时后停 = 30. Exits this Xiaozhi conversation after the reply. Stations come from a public directory, so do not promise a particular one; the result shows on screen.","inputSchema":{"type":"object","properties":{"city":{"type":"string","maxLength":16},"station":{"type":"string","maxLength":10},"stop_after_minutes":{"type":"integer","minimum":1,"maximum":180}},"required":["city"]}})"
 };
-struct App {const char *key; passport_app_id_t id;};
-constexpr App apps[] = {
-    {"music",APP_ID_NETEASE},{"radio",APP_ID_RADIO},{"reminders",APP_ID_REMINDERS},
-    {"lists",APP_ID_LISTS},{"pomodoro",APP_ID_POMODORO},{"settings",APP_ID_SETTINGS},{"home",APP_ID_HOME},
-    {"launcher",APP_ID_LAUNCHER},{"stopwatch",APP_ID_STOPWATCH},{"tetris",APP_ID_TETRIS},
-    {"sound_jump",APP_ID_SOUND_JUMP},{"game",APP_ID_GAME},{"muse",APP_ID_MUSE},
-    {"voice",APP_ID_VOICE},{"xiaozhi",APP_ID_XIAOZHI}
-};
-const char *app_key(passport_app_id_t id) {
-    for (const auto &app : apps) if (app.id == id) return app.key;
-    return "unknown";
-}
 using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
 std::string print(cJSON *value) {
     char *raw=cJSON_PrintUnformatted(value);
     std::string text=raw?raw:"{}";cJSON_free(raw);return text;
+}
+
+// The open-app schema is derived from the registry, so disabled plugins vanish
+// from the model's choices without maintaining a second app list.
+const char *application_schema() {
+    Json root(cJSON_CreateObject(), cJSON_Delete);
+    cJSON_AddStringToObject(root.get(), "name", "self.application.open");
+    std::string description = "Open a built-in device app on explicit request.";
+    description += " launcher=应用列表;";
+    for (size_t i = 0; i < app_registry_openable_count(); ++i) {
+        const passport_app_t *app = app_registry_get_openable(i);
+        if (!app || !app->key) continue;
+        description += std::string(" ") + app->key + "=" + (app->name ? app->name : app->key) + ";";
+    }
+    description += " Ask which app if ambiguous. Opens its screen only. Switching exits this "
+                   "Xiaozhi conversation after the tool reply; do not promise continued background "
+                   "voice control.";
+    cJSON_AddStringToObject(root.get(), "description", description.c_str());
+    cJSON *schema = cJSON_AddObjectToObject(root.get(), "inputSchema");
+    cJSON_AddStringToObject(schema, "type", "object");
+    cJSON *properties = cJSON_AddObjectToObject(schema, "properties");
+    cJSON *app = cJSON_AddObjectToObject(properties, "app");
+    cJSON_AddStringToObject(app, "type", "string");
+    cJSON *values = cJSON_AddArrayToObject(app, "enum");
+    cJSON_AddItemToArray(values, cJSON_CreateString("launcher"));
+    for (size_t i = 0; i < app_registry_openable_count(); ++i) {
+        const passport_app_t *candidate = app_registry_get_openable(i);
+        if (candidate && candidate->key) cJSON_AddItemToArray(values, cJSON_CreateString(candidate->key));
+    }
+    cJSON *required = cJSON_AddArrayToObject(schema, "required");
+    cJSON_AddItemToArray(required, cJSON_CreateString("app"));
+    static std::string text;
+    text = print(root.get());
+    return text.c_str();
 }
 std::string reply(cJSON *value, bool error) {
     Json result(cJSON_CreateObject(),cJSON_Delete);
@@ -101,8 +124,18 @@ std::string search(const cJSON *args) {
 }
 }
 size_t tool_count(){return sizeof(schemas)/sizeof(schemas[0]);}
-const char *tool_schema(size_t index){return index<tool_count()?schemas[index]:nullptr;}
+const char *tool_schema(size_t index) {
+    if (index >= tool_count()) return nullptr;
+    if (!schemas[index]) return application_schema();
+    return schemas[index];
+}
 std::string call(const char *name,const cJSON *args,uint64_t token) {
+    const passport_app_id_t owner =
+        !std::strcmp(name,"self.music.search") || !std::strcmp(name,"self.music.play")
+            ? APP_ID_NETEASE
+            : !std::strcmp(name,"self.radio.play") ? APP_ID_RADIO : APP_ID_COUNT;
+    if (owner != APP_ID_COUNT && !app_registry_enabled(owner))
+        return fail("该应用已在设置中关闭，请先在设置里开启");
     Request request;
     if (!std::strcmp(name,"self.device.get_status")) request.action=Action::Status;
     else if (!std::strcmp(name,"self.audio.set_volume")) request.action=Action::Volume;
@@ -148,8 +181,13 @@ std::string call(const char *name,const cJSON *args,uint64_t token) {
     } else if (request.action==Action::Open) {
         const auto *app=cJSON_GetObjectItemCaseSensitive(args,"app");
         if (!cJSON_IsString(app)) return fail("请明确要打开哪个应用");
-        for (const auto &candidate:apps) if (!std::strcmp(app->valuestring,candidate.key)) request.app=candidate.id;
-        if (request.app==APP_ID_COUNT) return fail("设备没有这个应用，请选择内置应用");
+        if (!std::strcmp(app->valuestring,"launcher")) request.app=APP_ID_LAUNCHER;
+        for (size_t i=0;i<app_registry_openable_count()&&request.app==APP_ID_COUNT;++i) {
+            const passport_app_t *candidate=app_registry_get_openable(i);
+            if (candidate && candidate->key && !std::strcmp(app->valuestring,candidate->key))
+                request.app=candidate->id;
+        }
+        if (request.app==APP_ID_COUNT) return fail("设备没有这个应用，请选择已启用的内置应用");
     } else if (request.action==Action::Handover) {
         using voice_intent::Source;
         auto &media=request.handover;
@@ -222,11 +260,11 @@ std::string call(const char *name,const cJSON *args,uint64_t token) {
         cJSON_AddNumberToObject(value.get(),"applied_brightness_percent",result.applied_brightness);
         cJSON_AddBoolToObject(value.get(),"limited_by_low_battery",true);
     }
-    cJSON_AddStringToObject(value.get(),"current_app",app_key(result.app));
+    cJSON_AddStringToObject(value.get(),"current_app",app_registry_key(result.app));
     if (request.action==Action::Open || request.action==Action::Handover) {
         const bool handover=request.action==Action::Handover;
         cJSON_AddBoolToObject(value.get(),"accepted",true);
-        cJSON_AddStringToObject(value.get(),"target_app",app_key(handover?request.handover.app:request.app));
+        cJSON_AddStringToObject(value.get(),"target_app",app_registry_key(handover?request.handover.app:request.app));
         cJSON_AddStringToObject(value.get(),"state","switch_after_tool_response");
         if (handover) {
             // The app resolves the request after login or directory lookup; nothing plays yet.

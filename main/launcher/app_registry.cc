@@ -24,6 +24,7 @@
 #include "ui_sfx.h"
 #include "apps/reminders/reminder_service.h"
 #include "apps/xiaozhi/app_xiaozhi.h"
+#include "nvs.h"
 #include <atomic>
 #include <vector>
 
@@ -48,10 +49,9 @@ extern const passport_app_t g_lists_app;
 
 namespace {
 
-// 应用板块(Launcher 轮播)里展示的应用。
-// 首页(APP_ID_HOME)**不在这里** —— 它是底座而非一张卡,改由
-// app_registry_get_by_id() 单独寻址,这样 switch_to(APP_ID_HOME) 才不会找不到而黑屏。
-// AI设备(AI设备/Codex 陪伴精灵)已于 2026-09-12 移除,见 docs/app-review-2026-09-12.md。
+// 链接期插件表:所有应用只在这里登记一次,行为差异写在各自的 passport_app_t
+// 元数据里。新增/隐藏应用不需要改注册表、设置页或设备控制的任何 switch。
+// 首页与配网是系统底座,标记为不出现在应用列表。
 const passport_app_t *s_apps[] = {
     &g_xiaozhi_app,
     &g_radio_app,
@@ -66,16 +66,65 @@ const passport_app_t *s_apps[] = {
     &g_game_app,
     &g_sound_jump_app,
     &g_settings_app,   // 设置放最后(应用惯用收尾位置)
+    &g_home_app,
+    &g_wifi_app,
 };
 
 constexpr size_t kAppCount = sizeof(s_apps) / sizeof(s_apps[0]);
-bool feedback_allowed(passport_app_id_t id) {
-    return id == APP_ID_HOME || id == APP_ID_LAUNCHER || id == APP_ID_SETTINGS ||
-           id == APP_ID_WIFI || id == APP_ID_STOPWATCH || id == APP_ID_POMODORO || id == APP_ID_TETRIS || id == APP_ID_REMINDERS || id == APP_ID_LISTS;
-}
+constexpr char kFlagsNamespace[] = "app_flags";
+
 std::atomic<passport_app_id_t> s_active_id{APP_ID_LAUNCHER};
 wake_gate_t s_wake_gate{};
 bool s_initialized[APP_ID_COUNT] = {};
+bool s_enabled[APP_ID_COUNT] = {};
+
+const passport_app_t *find_app(passport_app_id_t id) {
+    for (const passport_app_t *app : s_apps) {
+        if (app && app->id == id) return app;
+    }
+    return nullptr;
+}
+
+bool default_enabled(const passport_app_t *app) {
+    return app && (!app->optional || app->default_enabled);
+}
+
+void load_enabled() {
+    nvs_handle_t handle = 0;
+    const bool stored = nvs_open(kFlagsNamespace, NVS_READONLY, &handle) == ESP_OK;
+    for (const passport_app_t *app : s_apps) {
+        if (!app || app->id >= APP_ID_COUNT) continue;
+        bool enabled = default_enabled(app);
+        if (app->optional && app->key && app->key[0] && stored) {
+            uint8_t value = 0;
+            if (nvs_get_u8(handle, app->key, &value) == ESP_OK) enabled = value != 0;
+        }
+        s_enabled[app->id] = enabled;
+    }
+    if (stored) nvs_close(handle);
+    s_enabled[APP_ID_LAUNCHER] = true;
+}
+
+bool store_enabled(const passport_app_t *app, bool enabled) {
+    nvs_handle_t handle;
+    esp_err_t result = nvs_open(kFlagsNamespace, NVS_READWRITE, &handle);
+    if (result == ESP_OK) {
+        result = nvs_set_u8(handle, app->key, enabled ? 1 : 0);
+        if (result == ESP_OK) result = nvs_commit(handle);
+        nvs_close(handle);
+    }
+    if (result != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to save %s: %d", app->key, (int)result);
+        return false;
+    }
+    return true;
+}
+
+bool feedback_allowed(passport_app_id_t id) {
+    if (id == APP_ID_LAUNCHER) return true;
+    const passport_app_t *app = find_app(id);
+    return app && app->allow_toast;
+}
 
 // 2026-09-13:switch_to() 会被三个不同任务调用(input_task 按键/长按、
 // main.cc 的串口命令任务、wifi_setup 的 connect_worker),而它内部是
@@ -101,16 +150,9 @@ struct SwitchGuard {
 // 桌面/首页/设置等待机前台放宽到 MAX modem sleep(下行延迟可到 ~1s,对
 // 天气/SNTP/上传服务无感),是待机电流的最大单项优化。
 WifiPowerSaveLevel power_save_level_for(passport_app_id_t id) {
-    switch (id) {
-        case APP_ID_RADIO:
-        case APP_ID_NETEASE:
-        case APP_ID_VOICE:
-        case APP_ID_XIAOZHI:
-        case APP_ID_MUSE:
-            return WifiPowerSaveLevel::BALANCED;
-        default:
-            return WifiPowerSaveLevel::LOW_POWER;
-    }
+    const passport_app_t *app = find_app(id);
+    return app && app->streaming ? WifiPowerSaveLevel::BALANCED
+                                 : WifiPowerSaveLevel::LOW_POWER;
 }
 
 // 收音机/小智/Muse 的 TLS、解码与音频缓冲需要大块连续内存。C3 无 PSRAM,
@@ -131,14 +173,10 @@ struct HeapNeed {
 // 小智最大单块 12 KiB(任务栈);2026-11-07 实测(设备工具、提醒、清单后)会话峰值约 58 KiB,
 // 会话内音乐搜索另有自身预检(24 KiB);Muse 工作任务栈 12 KiB 加 TLS 8 KiB。
 HeapNeed heap_need(passport_app_id_t id) {
-    switch (id) {
-        case APP_ID_RADIO: return {24 * 1024, 48 * 1024};
-        // Same MP3 decoder as Radio; logged-in requests add TLS only while it is closed.
-        case APP_ID_NETEASE: return {24 * 1024, 48 * 1024};
-        case APP_ID_XIAOZHI: return {16 * 1024, 64 * 1024};
-        case APP_ID_MUSE: return {20 * 1024, 44 * 1024};
-        default: return {0, 0};
-    }
+    const passport_app_t *app = find_app(id);
+    if (!app) return {0, 0};
+    return {static_cast<size_t>(app->heap_largest_kb) * 1024,
+            static_cast<size_t>(app->heap_free_kb) * 1024};
 }
 
 // 进入重型应用时记下分配失败计数;离开时若计数增加,说明该会话已在缺内存
@@ -149,7 +187,8 @@ bool s_heap_strained = false;
 bool s_fresh_heap = false;
 
 bool heavy_app(passport_app_id_t id) {
-    return id == APP_ID_RADIO || id == APP_ID_NETEASE || id == APP_ID_XIAOZHI || id == APP_ID_MUSE;
+    const HeapNeed need = heap_need(id);
+    return need.largest > 0 || need.free > 0;
 }
 
 // 在旧应用 stop() 之后调用:此时测到的才是新应用可用的堆。
@@ -306,7 +345,9 @@ void show_clean_launch_notice(passport_app_id_t id) {
 } // namespace
 
 void app_registry_init(void) {
-    ESP_LOGI(TAG, "Initializing app registry with %u apps...", (unsigned)kAppCount);
+    load_enabled();
+    ESP_LOGI(TAG, "Initializing app registry with %u plugins, %u visible...",
+             (unsigned)kAppCount, (unsigned)app_registry_get_count());
     if (!s_switch_mutex) s_switch_mutex = xSemaphoreCreateRecursiveMutex();
     if (esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "display_on", &s_display_awake_lock) == ESP_OK)
         esp_pm_lock_acquire(s_display_awake_lock);
@@ -323,25 +364,93 @@ void app_registry_init(void) {
 }
 
 size_t app_registry_get_count(void) {
-    return kAppCount;
+    size_t count = 0;
+    for (const passport_app_t *app : s_apps) {
+        if (app && app->in_launcher && s_enabled[app->id]) ++count;
+    }
+    return count;
 }
 
 const passport_app_t *app_registry_get_by_index(size_t index) {
-    if (index >= kAppCount) return nullptr;
-    return s_apps[index];
+    for (const passport_app_t *app : s_apps) {
+        if (!app || !app->in_launcher || !s_enabled[app->id]) continue;
+        if (index == 0) return app;
+        --index;
+    }
+    return nullptr;
 }
 
 const passport_app_t *app_registry_get_by_id(passport_app_id_t id) {
-    // 首页不在 s_apps 轮播列表里,但仍必须能被 switch_to() 直接寻址。
-    // 少了这个特判,切回首页会因为找不到 app 实例而停在过渡屏(黑屏)。
-    if (id == APP_ID_HOME) return &g_home_app;
-    if (id == APP_ID_WIFI) return &g_wifi_app; // hidden system setup, never a launcher card
-    for (size_t i = 0; i < kAppCount; ++i) {
-        if (s_apps[i] && s_apps[i]->id == id) {
-            return s_apps[i];
+    return find_app(id);
+}
+
+bool app_registry_enabled(passport_app_id_t id) {
+    if (id == APP_ID_LAUNCHER) return true;
+    if (id <= APP_ID_LAUNCHER || id >= APP_ID_COUNT) return false;
+    return s_enabled[id];
+}
+
+bool app_registry_set_enabled(passport_app_id_t id, bool enabled) {
+    const passport_app_t *app = find_app(id);
+    if (!app || !app->optional || !app->key || !app->key[0]) return false;
+    if (!enabled && s_active_id.load() == id) return false;
+    if (!store_enabled(app, enabled)) return false;
+    s_enabled[id] = enabled;
+    ESP_LOGI(TAG, "%s: %s", app->key, enabled ? "enabled" : "disabled");
+    return true;
+}
+
+bool app_registry_reset_optional(void) {
+    bool saved = true;
+    for (const passport_app_t *app : s_apps) {
+        if (!app || !app->optional || !app->key || !app->key[0]) continue;
+        if (store_enabled(app, app->default_enabled)) {
+            s_enabled[app->id] = app->default_enabled;
+        } else {
+            saved = false;
         }
     }
+    return saved;
+}
+
+size_t app_registry_optional_count(void) {
+    size_t count = 0;
+    for (const passport_app_t *app : s_apps) {
+        if (app && app->optional && app->key && app->key[0]) ++count;
+    }
+    return count;
+}
+
+const passport_app_t *app_registry_get_optional(size_t index) {
+    for (const passport_app_t *app : s_apps) {
+        if (!app || !app->optional || !app->key || !app->key[0]) continue;
+        if (index == 0) return app;
+        --index;
+    }
     return nullptr;
+}
+
+size_t app_registry_openable_count(void) {
+    size_t count = 0;
+    for (const passport_app_t *app : s_apps) {
+        if (app && app->openable && s_enabled[app->id]) ++count;
+    }
+    return count;
+}
+
+const passport_app_t *app_registry_get_openable(size_t index) {
+    for (const passport_app_t *app : s_apps) {
+        if (!app || !app->openable || !s_enabled[app->id]) continue;
+        if (index == 0) return app;
+        --index;
+    }
+    return nullptr;
+}
+
+const char *app_registry_key(passport_app_id_t id) {
+    if (id == APP_ID_LAUNCHER) return "launcher";
+    const passport_app_t *app = find_app(id);
+    return app && app->key && app->key[0] ? app->key : "unknown";
 }
 
 passport_app_id_t app_registry_take_clean_launch(void) {
@@ -350,6 +459,7 @@ passport_app_id_t app_registry_take_clean_launch(void) {
     s_clean_launch[0] = s_clean_launch[1] = 0; // 一次性:目标应用崩溃时下次开机回首页
     if ((magic != kCleanLaunchMagic && magic != kCleanTalkMagic) ||
         esp_reset_reason() != ESP_RST_SW || !heavy_app(id) ||
+        !app_registry_enabled(id) ||
         (magic == kCleanTalkMagic && id != APP_ID_XIAOZHI))
         return APP_ID_COUNT;
     s_start_xiaozhi_conversation = magic == kCleanTalkMagic;
@@ -382,11 +492,10 @@ void app_registry_switch_to(passport_app_id_t id) {
 
     if (id != APP_ID_WIFI && !wifi_setup_can_leave()) return;
 
-    // Reject unknown destinations before touching the current screen.
-    // 这个守卫在 2026-09-12 移除 AI设备 模块后加,防止残留 id 再次踩坑。
+    // Reject unknown or disabled destinations before touching the current screen.
     const passport_app_t *next = app_registry_get_by_id(id);
-    if (id != APP_ID_LAUNCHER && next == nullptr) {
-        ESP_LOGE(TAG, "switch_to(%d): no app registered for this id; switch ignored", (int)id);
+    if (id != APP_ID_LAUNCHER && (next == nullptr || !app_registry_enabled(id))) {
+        ESP_LOGE(TAG, "switch_to(%d): app is missing or disabled; switch ignored", (int)id);
         return;
     }
 

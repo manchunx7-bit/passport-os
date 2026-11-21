@@ -117,4 +117,5 @@ const passport_app_t g_wifi_app = {
     .desc = "配网、资料与名片", .tag = "SYSTEM", .theme_color = 0x181B1C,
     .init = wifi_setup_init, .start = wifi_setup_start,
     .stop = wifi_setup_stop, .on_key = wifi_setup_on_key,
+    .key = "wifi", .in_launcher = false, .openable = false, .allow_toast = true,
 };
