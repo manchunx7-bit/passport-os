@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 tests/test_voice_memory.py
+python3 tests/test_build_scripts.py
 python3 tests/test_xiaozhi_face_power.py
 python3 tests/check_digit_font.py
 python3 tests/check_title_glyphs.py

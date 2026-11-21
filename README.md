@@ -92,7 +92,7 @@ FoloToy AI Passport 社区固件 · ESP32-C3 · 8 MB Flash · 13 款功能与应
 
 > **先分清完整安装和普通升级。** 完整镜像会覆盖写入范围内的配置；彻底重置还需要擦除 Flash。想保留配网、资料和图片时，先备份并确认分区布局一致，再使用应用镜像，不能先擦除整片 Flash。
 
-详细的文件选择、Windows 烧录命令与常见问题，见 [社区安装说明](docs/open-source-guide-draft-20261025.md)。
+文件选择、Windows / macOS / Linux 烧录命令、数据备份与误刷恢复，见 [安全刷机指南](docs/safe-flashing.zh_CN.md)；首次配网流程见 [社区安装说明](docs/open-source-guide-draft-20261025.md)。
 
 <details>
 <summary><strong>首次开机，怎么连接手机？</strong></summary>
@@ -127,7 +127,7 @@ FoloToy AI Passport 社区固件 · ESP32-C3 · 8 MB Flash · 13 款功能与应
 
 ### 编译第一版
 
-准备 **Git、ESP-IDF 5.5.3** 及其配套工具链。Windows 用户可以在 WSL 中构建，再从 Windows 串口烧录。
+准备 **Git、ESP-IDF 5.5.3** 及其配套工具链。macOS、Linux 和 Windows 的 WSL / Git Bash 都可以直接运行构建脚本。
 
 ```bash
 git clone https://github.com/manchunx7-bit/passport-os.git
@@ -135,11 +135,13 @@ cd passport-os
 bash build.sh release
 ```
 
-构建脚本默认从 `/opt/esp-idf` 加载环境。如果安装在其他目录，通过 `IDF_DIR` 指定路径，例如：
+脚本依次从 `IDF_DIR`、`IDF_PATH` 和常见安装位置（`~/.espressif/v5.5.3/esp-idf`、`/opt/esp-idf`、`~/esp/esp-idf`）查找 ESP-IDF，并兼容 macOS EIM 安装。装在其它目录时显式指定：
 
 ```bash
 IDF_DIR="$HOME/esp/esp-idf" bash build.sh release
 ```
+
+Windows 若不用 WSL，可在 PowerShell 中先运行 ESP-IDF 的 `export.ps1`，再直接执行 `idf.py -B build-public ... build`；构建脚本本身需要 bash 环境。烧录方式见 [安全刷机指南](docs/safe-flashing.zh_CN.md)。
 
 第三方组件由 ESP-IDF Component Manager 根据依赖文件获取。构建后得到：
 
