@@ -22,18 +22,21 @@
 使用 ESP-IDF 5.5.3。全新机器先按
 [环境引导](../docs/development/engineering/environment-setup.zh_CN.md)完成安装。
 
-编译优先运行仓库固件门禁，烧录优先把验证过的合并镜像写入 `0x0`。以下直接
-IDF 命令只用于增量开发。
+编译优先运行仓库固件门禁。全新安装或彻底重置时把验证过的合并镜像写入 `0x0`；
+保留配网和资料的升级只写 `0x10000` 应用分区，不能把应用镜像写到 `0x0`。详见
+[安全刷机指南](../docs/safe-flashing.zh_CN.md)。以下直接 IDF 命令只用于增量开发。
 
 ```bash
 source <ESP-IDF-v5.5.3-路径>/export.sh
 idf.py --version             # 必须输出 ESP-IDF v5.5.3
 ./tools/validate.sh --firmware # 优先生成合并固件
-idf.py set-target esp32c3     # 配置目标芯片（fresh checkout 后/换 target 后运行）
-idf.py build                  # 可选：增量 app 编译
-idf.py flash monitor          # 可选：增量 app 烧录
+idf.py app-flash              # 只写应用分区 0x10000，保留配置
+idf.py flash monitor          # 可选：烧录当前构建并查看日志
 idf.py fullclean              # 配置过期时清空生成状态（勿用于清理用户源码改动）
 ```
+
+`bash build.sh` 会通过 `IDF_DIR`、`IDF_PATH` 或常见安装位置查找 ESP-IDF，
+macOS、Linux、WSL 和 Git Bash 使用同一套命令。
 
 当前基线含一个可脱离硬件运行的纯逻辑测试：
 
