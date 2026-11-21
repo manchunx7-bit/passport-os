@@ -64,15 +64,27 @@ typedef struct passport_app_s {
 
     // 插件元数据:注册表、设置页和设备控制都只读这些字段,
     // 不再按 app id 写 switch,新增应用只改自己的描述符。
-    const char *key;            // 持久化与 MCP 使用的稳定标识
-    bool in_launcher;           // 出现在应用列表
-    bool openable;              // 允许设备控制打开
-    bool optional;              // 用户可在设置页开关
-    bool default_enabled;       // 无 NVS 记录时的初始状态
-    bool allow_toast;           // 前台按键反馈音
-    bool streaming;             // 息屏后仍需保持低延迟网络/音频
-    uint16_t heap_largest_kb;   // 进入前要求单块连续内存,0 表示轻量应用
-    uint16_t heap_free_kb;      // 进入前要求总空闲内存
+#ifdef __cplusplus
+    const char *key = nullptr;  // 持久化与 MCP 使用的稳定标识
+    bool in_launcher = false;   // 出现在应用列表
+    bool openable = false;      // 允许设备控制打开
+    bool optional = false;      // 用户可在设置页开关
+    bool default_enabled = false; // 无 NVS 记录时的初始状态
+    bool allow_toast = false;   // 前台按键反馈音
+    bool streaming = false;     // 息屏后仍需保持低延迟网络/音频
+    uint16_t heap_largest_kb = 0; // 进入前要求单块连续内存,0 表示轻量应用
+    uint16_t heap_free_kb = 0;  // 进入前要求总空闲内存
+#else
+    const char *key;
+    bool in_launcher;
+    bool openable;
+    bool optional;
+    bool default_enabled;
+    bool allow_toast;
+    bool streaming;
+    uint16_t heap_largest_kb;
+    uint16_t heap_free_kb;
+#endif
 } passport_app_t;
 
 #ifdef __cplusplus
