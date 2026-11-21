@@ -25,7 +25,7 @@ let state='idle',saved=false,failShare=false,denyFinish=false,emptyScan=true,fai
 let connectError='';
 let avatarError='',avatarDeviceCode='ESP_FAIL';
 let museTokenSet=false,musePaired=false,museProxyHost='',museProxyPort=0,failMuseSave=false,failMuseLoad=false,museGate=null;
-let failCities=false,cityGate=null;let savedProfile={name:'测试',signature:'已有签名',address:'原地址',city:'自定义城市',lat:'22.3',lon:'113.6',avatar:true,share_image:true,portrait_theme_palettes:[[0x254d36,0x4b8060,0x80b795,0xa8edbb],[0x484d43,0x797d69,0xb6b7a0,0xeee7d6],[0x374543,0x637771,0xadbfb1,0xf1eee6],[0x343c55,0x657593,0xb3c5d8,0xf4f4f6]]};let gallery=[{slot:0,bytes:12000}],blobBytes=20000,qualityAttempts=[];
+let failCities=false,cityGate=null;let savedProfile={name:'测试',signature:'已有签名',address:'原地址',city:'自定义城市',lat:'22.3',lon:'113.6',avatar:true,share_image:true,portrait_styles:[{id:0,label:'默认',palette:[0,0,0,0]},{id:1,label:'经典绿',palette:[0x254d36,0x4b8060,0x80b795,0xa8edbb]},{id:2,label:'旅行仪器',palette:[0x484d43,0x797d69,0xb6b7a0,0xeee7d6]},{id:3,label:'像素白',palette:[0x374543,0x637771,0xadbfb1,0xf1eee6]},{id:4,label:'霓虹黑',palette:[0x343c55,0x657593,0xb3c5d8,0xf4f4f6]}]};let gallery=[{slot:0,bytes:12000}],blobBytes=20000,qualityAttempts=[];
 const phoneWindow={__T:314159,scrollTo(){},addEventListener(){},isSecureContext:false,crypto:require('node:crypto').webcrypto,location:{origin:'http://192.168.4.1'}};
 const phoneNavigator={};
 class TestURL extends URL{static createObjectURL(){return 'blob:fixture'}static revokeObjectURL(){}}
@@ -94,7 +94,14 @@ const posts=()=>requests.filter(r=>r.options.method==='POST');
  await assert.rejects(context.api('/api/avatar',new Uint8Array(6664)),error=>error.path==='/api/avatar'&&error.code==='avatar_store'&&error.deviceCode==='ESP_ERR_NO_MEM');
  avatarError='';avatarDeviceCode='ESP_FAIL';
  const writesBeforePreset=posts().length;
- for(const [id,style] of [['portraitStyleClassic',1],['portraitStyleTravel',2],['portraitStylePlayful',3],['portraitStyleNeon',4],['portraitStyleDefault',0]]){get(id).checked=true;get(id).onchange();assert.equal(context.portraitPacked()[4],style)}
+ assert.ok(!html.includes('portraitStyleClassic'),'style options come from the device enum, not page markup');
+ assert.ok(!html.includes('id="portraitStyleDefault"'),'style options come from the device enum, not page markup');
+ const renderedStyles=vm.runInContext('portraitStyles',context);
+ assert.deepEqual(renderedStyles.map(style=>style.id),[0,1,2,3,4]);
+ assert.deepEqual(renderedStyles.map(style=>style.label),['默认','经典绿','旅行仪器','像素白','霓虹黑']);
+ const styleRadios=get('portraitStyles').options.map(label=>label.options[0]);
+ assert.equal(styleRadios.length,5,'one radio per style returned by the device');
+ for(const radio of styleRadios){radio.checked=true;radio.onchange();assert.equal(context.portraitPacked()[4],Number(radio.value))}
  assert.equal(posts().length,writesBeforePreset,'changing presets only updates preview');
  failShare=false;denyFinish=true;await get('save').onclick();assert.match(get('saveStatus').textContent,/连接 Wi-Fi/);
  denyFinish=false;await get('save').onclick();assert.equal(get('step3').hidden,false);assert.equal(get('doneName').textContent,'新名字');

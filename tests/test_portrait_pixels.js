@@ -1,11 +1,11 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const html=fs.readFileSync('main/apps/home/phone_setup.html','utf8');
 const algorithm=html.slice(html.indexOf('function portraitLocalContrast('),html.indexOf('async function imageFile('));
-const styleIds=['portraitStyleDefault','portraitStyleClassic','portraitStyleTravel','portraitStylePlayful','portraitStyleNeon'];
+assert.ok(!html.includes('portraitStyleClassic'),'style ids must not be hardcoded in the page');
 const elements={portraitBackground:{checked:false},portraitBrightness:{value:'0'},portraitColor:{value:'50'}};
-for(const id of styleIds)elements[id]={};
 const themePalettes=[[0x254d36,0x4b8060,0x80b795,0xa8edbb],[0x484d43,0x797d69,0xb6b7a0,0xeee7d6],[0x374543,0x637771,0xadbfb1,0xf1eee6],[0x343c55,0x657593,0xb3c5d8,0xf4f4f6]];
-const context=vm.createContext({$:id=>elements[id],PORTRAIT:{w:96,h:138},portrait:null,portraitStyle:0,portraitPreparedCache:null,portraitPalette:[0,1,2,255],portraitThemePalettes:themePalettes,fixture:null});
+const portraitStyles=[{id:0,label:'默认',palette:[0,0,0,0]},...themePalettes.map((palette,i)=>({id:i+1,label:'主题'+(i+1),palette}))];
+const context=vm.createContext({$:id=>elements[id],PORTRAIT:{w:96,h:138},portrait:null,portraitStyle:0,portraitStyleInputs:[],portraitPreparedCache:null,portraitPalette:[0,1,2,255],portraitStyles,fixture:null});
 vm.runInContext(algorithm,context);
 function rgba(values){return Uint8ClampedArray.from(values.flatMap(v=>[v,v,v,255]))}
 const tones=rgba([0,80,150,255]);
@@ -72,5 +72,5 @@ context.setPortraitStyle(0);
 const deterministic=Buffer.from(context.portraitPacked());
 assert.deepEqual(Array.from(context.portraitPacked()),Array.from(deterministic),'preview and save are deterministic');
 assert.equal(context.portraitColor(deterministic,0),0);
-context.setPortraitStyle(999);assert.equal(elements.portraitStyleDefault.checked,true);assert.equal(context.portraitStyle,0);
+context.setPortraitStyle(999);assert.equal(context.portraitStyle,0,'unknown style falls back to the default');
 console.log('Portrait colors: PT36 packing, 15-color palette, retention slider, four theme styles, masks, brightness and determinism: PASS');

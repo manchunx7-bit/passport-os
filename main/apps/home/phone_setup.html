@@ -113,13 +113,7 @@ input[type=range]{width:100%;min-height:36px}.slider{margin-top:14px}.slider-hea
 <div class="file-pick"><label for="file">选择一张清晰的人像</label><input type="file" id="file" name="portrait" accept="image/*" aria-describedby="avatarPickerHelp"></div>
 <details class="sub picker-help"><summary>选图没有反应？</summary><div class="detail-body"><label for="fileFallback">从文件选择</label><input type="file" id="fileFallback" name="portraitFile" aria-describedby="avatarPickerHelp"><p id="avatarPickerHelp" class="help">支持 JPEG、PNG。仍打不开时，用系统浏览器访问 192.168.4.1</p></div></details>
 <div id="photoTools" class="photo-tools" hidden>
-<fieldset class="portrait-presets"><legend>风格</legend><div class="portrait-segments">
-<label><input type="radio" name="portraitStyle" id="portraitStyleDefault" value="0" checked><span>默认</span></label>
-<label><input type="radio" name="portraitStyle" id="portraitStyleClassic" value="1"><span>经典绿</span></label>
-<label><input type="radio" name="portraitStyle" id="portraitStyleTravel" value="2"><span>旅行仪器</span></label>
-<label><input type="radio" name="portraitStyle" id="portraitStylePlayful" value="3"><span>像素白</span></label>
-<label><input type="radio" name="portraitStyle" id="portraitStyleNeon" value="4"><span>霓虹黑</span></label>
-</div></fieldset>
+<fieldset class="portrait-presets"><legend>风格</legend><div class="portrait-segments" id="portraitStyles"></div></fieldset>
 <div class="crop-layout"><div id="vp" style="height:276px"><img id="pv" alt="人像取景预览"></div><div><canvas id="binc" width="96" height="138" style="height:138px" aria-label="设备人像预览"></canvas><p class="caption">设备效果</p></div></div>
 <div class="slider"><div class="slider-head"><label for="zm" class="caption">缩放</label><span class="slider-value"><input type="number" id="zmValue" min="100" max="400" step="10" value="100" inputmode="numeric" aria-label="缩放数值"><span class="slider-unit">%</span></span></div><input type="range" id="zm" min="100" max="400" step="10" value="100"><div class="slider-ticks" id="zmTicks" aria-hidden="true"></div></div>
 <div class="slider"><div class="slider-head"><label for="portraitBrightness" class="caption">明暗</label><span class="slider-value"><input type="number" id="portraitBrightnessValue" min="-48" max="48" step="8" value="0" inputmode="numeric" aria-label="明暗数值"></span></div><input type="range" id="portraitBrightness" min="-48" max="48" step="8" value="0"><div class="slider-ticks" id="portraitBrightnessTicks" aria-hidden="true"></div></div>
@@ -309,7 +303,7 @@ $('retryMuse').onclick=()=>loadMuse();$('useSavedMuse').onclick=()=>loadMuse(tru
 $('museSection').ontoggle=()=>{if($('museSection').open&&!museLoaded)return loadMuse()};
 
 // Portrait cropping happens on the phone, preserving the device's small memory budget.
-const VP={w:192,h:276},PORTRAIT={w:96,h:138};let portraitPalette=[0x03120b,0x3a5b45,0x719c80,0xa8edbb],portraitThemePalettes=[[0x254d36,0x4b8060,0x80b795,0xa8edbb],[0x484d43,0x797d69,0xb6b7a0,0xeee7d6],[0x374543,0x637771,0xadbfb1,0xf1eee6],[0x343c55,0x657593,0xb3c5d8,0xf4f4f6]];let zoom=1,ox=0,oy=0,base=1,portrait=null,shareImg=null,imageLoading=0,portraitStyle=0,portraitSampleCache=null,portraitPreparedCache=null;
+const VP={w:192,h:276},PORTRAIT={w:96,h:138};let portraitPalette=[0x03120b,0x3a5b45,0x719c80,0xa8edbb],portraitStyles=[],portraitStyleInputs=[];let zoom=1,ox=0,oy=0,base=1,portrait=null,shareImg=null,imageLoading=0,portraitStyle=0,portraitSampleCache=null,portraitPreparedCache=null;
 const CARD_MAX=6,CARD_BYTES=24576;let cards=[],cardsDirty=false,cardsReady=false,cardBusy=false,replaceSlot=null,cardStorage=null;
 function clamp(){if(!portrait)return;const s=base*zoom;ox=Math.min(0,Math.max(VP.w-portrait.naturalWidth*s,ox));oy=Math.min(0,Math.max(VP.h-portrait.naturalHeight*s,oy));$('pv').style.width=portrait.naturalWidth*s+'px';$('pv').style.left=ox+'px';$('pv').style.top=oy+'px'}
 function portraitPixels(){
@@ -397,7 +391,7 @@ function portraitColorPixels(data,tone,mask,w,h,retention){
  return {indices,palette};
 }
 function portraitThemePixels(tone,mask,w,h,style){
- const colors=portraitThemePalettes[style-1]||portraitThemePalettes[0],palette=new Uint32Array(16),indices=new Uint8Array(tone.length),bayer=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+ const entry=portraitStyles.find(s=>s.id===style),colors=entry?.palette?.length===4?entry.palette:portraitPalette,palette=new Uint32Array(16),indices=new Uint8Array(tone.length),bayer=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
  for(let i=0;i<4;i++)palette[i+1]=colors[i];
  for(let p=0;p<tone.length;p++)if(mask[p]){const x=p%w,y=(p/w)|0,v=tone[p]+(((bayer[(y%4)*4+x%4]+.5)/16)-.5)*34;indices[p]=(v<57?0:v<124?1:v<190?2:3)+1}
  return {indices,palette};
@@ -421,8 +415,24 @@ function portraitColor(packed,p){
  return (Math.round(r*255/31)<<16)|(Math.round(g*255/63)<<8)|Math.round(b*255/31);
 }
 function previewPortrait(){if(!portrait)return;const packed=portraitPacked(),g=$('binc').getContext('2d'),o=g.createImageData(PORTRAIT.w,PORTRAIT.h);for(let p=0;p<PORTRAIT.w*PORTRAIT.h;p++){const color=portraitColor(packed,p),i=p*4;o.data[i]=color>>16;o.data[i+1]=(color>>8)&255;o.data[i+2]=color&255;o.data[i+3]=255}g.putImageData(o,0,0)}
-function setPortraitStyle(value){portraitStyle=[0,1,2,3,4].includes(value)?value:0;for(const [i,id] of ['portraitStyleDefault','portraitStyleClassic','portraitStyleTravel','portraitStylePlayful','portraitStyleNeon'].entries())$(id).checked=portraitStyle===i;previewPortrait()}
-for(const [i,id] of ['portraitStyleDefault','portraitStyleClassic','portraitStyleTravel','portraitStylePlayful','portraitStyleNeon'].entries())$(id).onchange=()=>{if($(id).checked)setPortraitStyle(i)};
+function renderPortraitStyles(){
+ const box=$('portraitStyles');if(!box)return;
+ box.replaceChildren();portraitStyleInputs=[];
+ for(const style of portraitStyles){
+  const label=document.createElement('label'),input=document.createElement('input'),text=document.createElement('span');
+  input.type='radio';input.name='portraitStyle';input.value=String(style.id);input.id='portraitStyle'+style.id;
+  input.checked=style.id===portraitStyle;
+  input.onchange=()=>{if(input.checked)setPortraitStyle(style.id)};
+  text.textContent=style.label;
+  label.appendChild(input);label.appendChild(text);box.appendChild(label);portraitStyleInputs.push(input);
+ }
+}
+function setPortraitStyle(value){
+ const id=Number(value),match=portraitStyles.find(style=>style.id===id);
+ portraitStyle=match?match.id:0;
+ for(const input of portraitStyleInputs)input.checked=Number(input.value)===portraitStyle;
+ previewPortrait();
+}
 $('portraitBrightness').oninput=previewPortrait;$('portraitColor').oninput=previewPortrait;$('portraitBackground').onchange=previewPortrait;
 async function imageFile(input){const file=input.files[0];if(!file)return null;if(!file.size)throw new Error('图片文件为空，请重新选择。');if(file.size>20*1024*1024)throw new Error('图片超过 20 MB，请选择较小的图片。');const url=URL.createObjectURL(file);let timer;imageLoading++;try{const img=new Image();await new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(new Error('读取图片超时，请将图片保存到手机本地后重试。')),15000);img.onload=resolve;img.onerror=()=>reject(new Error('无法读取图片，请换一张 JPEG 或 PNG 图片。'));img.src=url});if(!img.naturalWidth||!img.naturalHeight)throw new Error('图片尺寸无效，请重新选择。');return img}catch(e){URL.revokeObjectURL(url);throw e}finally{clearTimeout(timer);imageLoading--}}
 async function selectPortrait(input){say('avatarStatus','正在读取图片…');try{const img=await imageFile(input);if(!img){say('avatarStatus',portrait?'已保留之前选择的人像。':'未选择图片。');return}if(portrait)URL.revokeObjectURL(portrait.src);portrait=img;$('pv').src=img.src;base=Math.max(VP.w/img.naturalWidth,VP.h/img.naturalHeight);zoom=1;$('zm').value=100;syncStepSliders();ox=(VP.w-img.naturalWidth*base)/2;oy=(VP.h-img.naturalHeight*base)/2;clamp();previewPortrait();$('photoTools').hidden=false;say('avatarStatus','已选择，将在完成设置时保存。')}catch(e){input.value='';say('avatarStatus',e.message,true)}}
@@ -496,7 +506,7 @@ async function shareBlob(){
 }
 async function save(){if(imageLoading||cardBusy){say('saveStatus','图片还在读取，请稍等。',true);return}if(!verified&&!hasSaved){step(1);say('networkStatus','请先连接 Wi-Fi。',true);return}let selected;try{selected=selectedCityProfile()}catch(e){say('saveStatus',e.message,true);return}const profile={name:$('name').value,signature:$('sig').value,address:loadedProfile.address||'',...selected};for(const [key,max] of [['name',31],['signature',95],['address',127],['city',47],['region',31],['radio_city',47],['lat',15],['lon',15]])if(bytes(profile[key])>max){say('saveStatus','有一项内容过长，请缩短后再保存。',true);return}$('save').disabled=true;$('back').disabled=true;try{renderCards();if(pendingMuseConfig()){say('saveStatus','正在保存 Muse 配置…');await saveMuseConfig(true)}say('saveStatus','正在保存个人资料…');await api('/api/profile',profile);if(portrait){say('saveStatus','正在保存人像…');await api('/api/avatar',portraitPacked())}await saveCards();say('saveStatus','正在完成设置…');await api('/api/finish',{});$('doneName').textContent=profile.name||'AI 护照';$('doneSummary').textContent='个人资料'+(portrait?'、人像':'')+(cards.length?'、'+cards.length+' 张彩色名片':'')+'已保存';step(3)}catch(e){say('saveStatus',e.message+' 尚未完成的内容可再次保存。',true)}finally{$('save').disabled=false;$('back').disabled=false;renderCards()}}
 $('save').onclick=()=>{cancelLocation();return save()};
-async function load(){try{const [profile,state]=await Promise.all([api('/api/profile'),api('/api/setup')]);await loadCities();for(const [id,key] of [['name','name'],['sig','signature']])$(id).value=profile[key]||'';if(Array.isArray(profile.portrait_palette)&&profile.portrait_palette.length===4)portraitPalette=profile.portrait_palette;const themePalettes=profile.portrait_theme_palettes;if(Array.isArray(themePalettes)&&themePalettes.length===4&&themePalettes.every(p=>Array.isArray(p)&&p.length===4&&p.every(Number.isInteger)))portraitThemePalettes=themePalettes;previewPortrait();restoreCity(profile);$('avatarState').textContent=profile.avatar?'已有，可替换':'可稍后上传';await loadCards();hasSaved=state.saved_network;$('reuse').hidden=!hasSaved;$('keepSaved').hidden=!hasSaved;$('savedField').hidden=!hasSaved;const selected=$('savedNetwork').value;$('savedNetwork').replaceChildren(new Option('自动选择附近已保存的网络',''));for(const name of state.saved_networks||[])$('savedNetwork').add(new Option(name,name));if((state.saved_networks||[]).includes(selected))$('savedNetwork').value=selected;$('connect').disabled=false;say('networkStatus','');if(state.finishing){step(3);return}if(state.state==='connected')networkReady('已连接 '+state.ssid);else if(state.state==='connecting'){lockNetwork(true);polls=0;pollTimer=setTimeout(poll,1000)}await scan()}catch(e){say('networkStatus','无法读取设备。请确认手机已连接设备热点，然后刷新页面。',true)}}
+async function load(){try{const [profile,state]=await Promise.all([api('/api/profile'),api('/api/setup')]);await loadCities();for(const [id,key] of [['name','name'],['sig','signature']])$(id).value=profile[key]||'';if(Array.isArray(profile.portrait_palette)&&profile.portrait_palette.length===4)portraitPalette=profile.portrait_palette;if(Array.isArray(profile.portrait_styles)){portraitStyles=profile.portrait_styles.filter(style=>style&&Number.isInteger(style.id)&&style.id>=0&&style.id<16&&typeof style.label==='string'&&style.label&&Array.isArray(style.palette)&&style.palette.length===4&&style.palette.every(Number.isInteger))}renderPortraitStyles();setPortraitStyle(portraitStyle);restoreCity(profile);$('avatarState').textContent=profile.avatar?'已有，可替换':'可稍后上传';await loadCards();hasSaved=state.saved_network;$('reuse').hidden=!hasSaved;$('keepSaved').hidden=!hasSaved;$('savedField').hidden=!hasSaved;const selected=$('savedNetwork').value;$('savedNetwork').replaceChildren(new Option('自动选择附近已保存的网络',''));for(const name of state.saved_networks||[])$('savedNetwork').add(new Option(name,name));if((state.saved_networks||[]).includes(selected))$('savedNetwork').value=selected;$('connect').disabled=false;say('networkStatus','');if(state.finishing){step(3);return}if(state.state==='connected')networkReady('已连接 '+state.ssid);else if(state.state==='connecting'){lockNetwork(true);polls=0;pollTimer=setTimeout(poll,1000)}await scan()}catch(e){say('networkStatus','无法读取设备。请确认手机已连接设备热点，然后刷新页面。',true)}}
 $('copyVoiceTutorial').onclick=async()=>{
  const link=$('voiceTutorialLink'),url='https://github.com/manchunx7-bit/passport-os';
  let copied=false;

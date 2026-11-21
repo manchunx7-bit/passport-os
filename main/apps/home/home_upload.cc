@@ -131,12 +131,16 @@ static esp_err_t handler_profile_get(httpd_req_t *req) {
     cJSON *subject = cJSON_AddArrayToObject(root, "portrait_subject_palette");
     for (uint8_t level = 0; level < 4; ++level)
         cJSON_AddItemToArray(subject, cJSON_CreateNumber(ui_theme_portrait_subject_color(level)));
-    cJSON *themes = cJSON_AddArrayToObject(root, "portrait_theme_palettes");
-    for (uint8_t theme = 0; theme < UI_THEME_COUNT; ++theme) {
-        cJSON *colors = cJSON_CreateArray();
+    cJSON *styles = cJSON_AddArrayToObject(root, "portrait_styles");
+    for (size_t index = 0; index < ui_portrait_style_count(); ++index) {
+        const ui_portrait_style_t style = ui_portrait_style_get(index);
+        cJSON *entry = cJSON_CreateObject();
+        cJSON_AddNumberToObject(entry, "id", style.id);
+        cJSON_AddStringToObject(entry, "label", style.label);
+        cJSON *colors = cJSON_AddArrayToObject(entry, "palette");
         for (uint8_t level = 0; level < 4; ++level)
-            cJSON_AddItemToArray(colors, cJSON_CreateNumber(ui_theme_portrait_theme_color((ui_theme_t)theme, level)));
-        cJSON_AddItemToArray(themes, colors);
+            cJSON_AddItemToArray(colors, cJSON_CreateNumber(style.palette[level]));
+        cJSON_AddItemToArray(styles, entry);
     }
     cJSON_AddBoolToObject(root, "share_image", home_profile_has_share_image());
     char *json = cJSON_PrintUnformatted(root);
