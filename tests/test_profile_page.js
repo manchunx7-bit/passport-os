@@ -25,7 +25,7 @@ let state='idle',saved=false,failShare=false,denyFinish=false,emptyScan=true,fai
 let connectError='';
 let avatarError='',avatarDeviceCode='ESP_FAIL';
 let museTokenSet=false,musePaired=false,museProxyHost='',museProxyPort=0,failMuseSave=false,failMuseLoad=false,museGate=null;
-let failCities=false,cityGate=null;let savedProfile={name:'测试',signature:'已有签名',address:'原地址',city:'自定义城市',lat:'22.3',lon:'113.6',avatar:true,share_image:true};let gallery=[{slot:0,bytes:12000}],blobBytes=20000,qualityAttempts=[];
+let failCities=false,cityGate=null;let savedProfile={name:'测试',signature:'已有签名',address:'原地址',city:'自定义城市',lat:'22.3',lon:'113.6',avatar:true,share_image:true,portrait_theme_palettes:[[0x254d36,0x4b8060,0x80b795,0xa8edbb],[0x484d43,0x797d69,0xb6b7a0,0xeee7d6],[0x374543,0x637771,0xadbfb1,0xf1eee6],[0x343c55,0x657593,0xb3c5d8,0xf4f4f6]]};let gallery=[{slot:0,bytes:12000}],blobBytes=20000,qualityAttempts=[];
 const phoneWindow={__T:314159,scrollTo(){},addEventListener(){},isSecureContext:false,crypto:require('node:crypto').webcrypto,location:{origin:'http://192.168.4.1'}};
 const phoneNavigator={};
 class TestURL extends URL{static createObjectURL(){return 'blob:fixture'}static revokeObjectURL(){}}
@@ -44,6 +44,13 @@ const context=vm.createContext({document:{getElementById:get,createElement:()=>n
  return {ok,json:async()=>result};
 }});
 vm.runInContext(script,context);
+for(const id of ['zm','portraitBrightness','portraitColor']){
+ assert.match(html,new RegExp(`id="${id}"[^>]*step=`),id+' slider must snap to steps');
+ assert.match(html,new RegExp(`id="${id}Value"`),id+' slider needs a numeric field');
+}
+get('zm').value='130';get('zm').oninput();assert.equal(get('zmValue').value,'130','slider echoes its value into the number field');
+get('zm').min='100';get('zm').max='400';get('zm').step='10';get('zmValue').value='137';get('zmValue').onchange();
+assert.equal(get('zm').value,'140','typed value snaps to the nearest step');assert.equal(get('zmValue').value,'140');
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const posts=()=>requests.filter(r=>r.options.method==='POST');
 (async()=>{
@@ -75,7 +82,7 @@ const posts=()=>requests.filter(r=>r.options.method==='POST');
  get('shareFile').files=[{size:1000}];await get('shareFile').onchange();
  failShare=true;await get('save').onclick();assert.equal(posts().filter(r=>r.url.startsWith('/api/finish')).length,0,'failed image must not close hotspot');assert.equal(get('save').disabled,false);
  req=posts().find(r=>r.url.startsWith('/api/profile'));let profile=JSON.parse(req.options.body);assert.equal(profile.name,'新名字');assert.equal(profile.address,'原地址','address field removed; saved value is preserved');assert.equal(profile.city,'自定义城市');assert.equal(profile.lat,'22.3','preserve custom weather coordinates');
- req=posts().find(r=>r.url.startsWith('/api/avatar'));assert.equal(req.options.body.byteLength,4976);assert.equal(req.options.body[4],3);
+ req=posts().find(r=>r.url.startsWith('/api/avatar'));assert.equal(req.options.body.byteLength,6664);assert.equal(req.options.body[4],0);assert.equal(req.options.body[3],54);
  // Failed avatar uploads retain the page and pending image for a later retry.
  for(const [code,message] of [['avatar_size',/长度不匹配/],['avatar_recv',/传输中断/],['avatar_store',/原头像已保留/]]){
   avatarError=code;const finishesBefore=posts().filter(r=>r.url.startsWith('/api/finish')).length;
@@ -84,10 +91,10 @@ const posts=()=>requests.filter(r=>r.options.method==='POST');
   assert.equal(get('save').disabled,false);assert.equal(get('back').disabled,false);
  }
  avatarDeviceCode='ESP_ERR_NO_MEM';await get('save').onclick();assert.match(get('saveStatus').textContent,/设备内存不足/);
- await assert.rejects(context.api('/api/avatar',new Uint8Array(4976)),error=>error.path==='/api/avatar'&&error.code==='avatar_store'&&error.deviceCode==='ESP_ERR_NO_MEM');
+ await assert.rejects(context.api('/api/avatar',new Uint8Array(6664)),error=>error.path==='/api/avatar'&&error.code==='avatar_store'&&error.deviceCode==='ESP_ERR_NO_MEM');
  avatarError='';avatarDeviceCode='ESP_FAIL';
  const writesBeforePreset=posts().length;
- for(const [id,preset] of [['portraitPresetDot',1],['portraitPresetFlat',2],['portraitPresetHybrid',3]]){get(id).checked=true;get(id).onchange();assert.equal(context.portraitPacked()[4],preset)}
+ for(const [id,style] of [['portraitStyleClassic',1],['portraitStyleTravel',2],['portraitStylePlayful',3],['portraitStyleNeon',4],['portraitStyleDefault',0]]){get(id).checked=true;get(id).onchange();assert.equal(context.portraitPacked()[4],style)}
  assert.equal(posts().length,writesBeforePreset,'changing presets only updates preview');
  failShare=false;denyFinish=true;await get('save').onclick();assert.match(get('saveStatus').textContent,/连接 Wi-Fi/);
  denyFinish=false;await get('save').onclick();assert.equal(get('step3').hidden,false);assert.equal(get('doneName').textContent,'新名字');
@@ -203,7 +210,7 @@ const posts=()=>requests.filter(r=>r.options.method==='POST');
  imageMode='ok';await get('fileFallback').onchange();
  assert.match(get('avatarStatus').textContent,/已选择/,'retry recovers after decode timeout');
  await get('save').onclick();assert.equal(get('step3').hidden,false);
- assert.equal(posts().filter(r=>r.url.startsWith('/api/avatar')).at(-1).options.body.byteLength,4976);
+ assert.equal(posts().filter(r=>r.url.startsWith('/api/avatar')).at(-1).options.body.byteLength,6664);
  assert.equal(posts().filter(r=>r.url.startsWith('/api/share')).at(-1).options.body.type,'image/jpeg');
  // Nationwide search and stable ids distinguish repeated county names.
  assert.ok(cityCatalog.length>=3000);assert.equal(new Set(cityCatalog.map(c=>c[4])).size,34);

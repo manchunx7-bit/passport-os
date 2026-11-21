@@ -60,7 +60,7 @@ esp_err_t home_profile_set_text(const home_profile_t *in);
 
 bool home_profile_has_avatar(void);
 
-// 把 SPIFFS 里的头像读进 dst(需 HOME_AVATAR_BYTES 字节)。调用方不得持有
+// 把 SPIFFS 里的头像读进 dst(需 HOME_AVATAR_MAX_BYTES 字节)。调用方不得持有
 // LVGL 锁(文件读取可达几十毫秒)。首次调用会挂载 storage 分区。
 esp_err_t home_profile_read_avatar(uint8_t *dst, size_t cap);
 

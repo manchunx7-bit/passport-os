@@ -135,16 +135,16 @@ struct WeatherSchedule {
 };
 WeatherSchedule s_weather_schedule;
 
-// Packed two-bit tone indices; the theme supplies colors at display time.
-// Home owns this buffer only while its screen/worker are alive.
+// Packed PT36 palette indices, or legacy PT35 tones; Home owns this buffer only
+// while its screen/worker are alive.
 uint8_t *s_portrait_packed = nullptr;
 
 esp_err_t read_portrait(bool present) {
     if (!present) return ESP_FAIL;
     if (!s_portrait_packed)
-        s_portrait_packed = static_cast<uint8_t *>(malloc(HOME_AVATAR_BYTES));
+        s_portrait_packed = static_cast<uint8_t *>(malloc(HOME_AVATAR_MAX_BYTES));
     if (!s_portrait_packed) return ESP_ERR_NO_MEM;
-    return home_profile_read_avatar(s_portrait_packed, HOME_AVATAR_BYTES);
+    return home_profile_read_avatar(s_portrait_packed, HOME_AVATAR_MAX_BYTES);
 }
 // 显示用 A8 展开:LVGL 软渲染 A8 快速路径(alpha 蒙版 + recolor 磷光绿纯色)。
 // 2026-09-13 改为堆分配(home_start 申请 / home_stop 归还):14.4KB 常驻 .bss
@@ -206,6 +206,23 @@ bool s_weather_fetching = false;
 void expand_portrait(void) {
     if (!s_portrait_pixels || !s_portrait_packed) return;
     lv_image_cache_drop(&s_portrait_dsc);
+    if (home_portrait_is_color(s_portrait_packed)) {
+        memset(s_portrait_pixels, 0, HOME_PORTRAIT_I4_BYTES);
+        auto *palette = reinterpret_cast<lv_color32_t *>(s_portrait_pixels);
+        for (uint8_t i = 1; i < 16; ++i) {
+            const uint8_t *entry = s_portrait_packed + HOME_PORTRAIT_HEADER_BYTES + (i - 1) * 2;
+            const uint16_t c = (uint16_t)(entry[0] | (entry[1] << 8));
+            const uint32_t r = ((c >> 11) & 31) * 255 / 31;
+            const uint32_t g = ((c >> 5) & 63) * 255 / 63;
+            const uint32_t b = (c & 31) * 255 / 31;
+            palette[i] = lv_color_to_32(lv_color_hex((r << 16) | (g << 8) | b), LV_OPA_COVER);
+        }
+        for (size_t pixel = 0; pixel < HOME_PORTRAIT_PIXELS; pixel += 2)
+            s_portrait_pixels[64 + pixel / 2] =
+                (home_portrait_color_index(s_portrait_packed, pixel) << 4) |
+                home_portrait_color_index(s_portrait_packed, pixel + 1);
+        return;
+    }
     if (s_portrait_packed[4] == 0) {
         // Preserve LVGL's original RGB565 alpha blending, including its rounding.
         for (size_t pixel = 0; pixel < HOME_PORTRAIT_PIXELS; ++pixel)
@@ -224,7 +241,8 @@ void expand_portrait(void) {
 // 无头像时显示占位文字(磷光风格不用彩色吉祥物)。
 void apply_avatar(bool have_image) {
     have_image = have_image && s_portrait_packed;
-    const bool legacy = have_image && s_portrait_packed[4] == 0;
+    const bool legacy = have_image && !home_portrait_is_color(s_portrait_packed) &&
+        s_portrait_packed[4] == 0;
     const size_t bytes = legacy ? HOME_PORTRAIT_PIXELS : HOME_PORTRAIT_I4_BYTES;
     if (have_image && s_portrait_pixels && s_portrait_dsc.data_size != bytes) {
         lv_image_set_src(s_avatar_img, nullptr);

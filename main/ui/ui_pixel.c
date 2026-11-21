@@ -69,7 +69,7 @@ uint32_t ui_theme_portrait_color(uint8_t level)
     }
     return color;
 }
-uint32_t ui_theme_portrait_subject_color(uint8_t level)
+uint32_t ui_theme_portrait_theme_color(ui_theme_t theme, uint8_t level)
 {
     static const uint32_t colors[UI_THEME_COUNT][4] = {
         {0x254D36, 0x4B8060, 0x80B795, 0xA8EDBB},
@@ -77,7 +77,12 @@ uint32_t ui_theme_portrait_subject_color(uint8_t level)
         {0x374543, 0x637771, 0xADBFB1, 0xF1EEE6},
         {0x343C55, 0x657593, 0xB3C5D8, 0xF4F4F6},
     };
-    return colors[s_ui_theme][level > 3 ? 3 : level];
+    if ((unsigned)theme >= UI_THEME_COUNT) theme = UI_THEME_CLASSIC;
+    return colors[theme][level > 3 ? 3 : level];
+}
+uint32_t ui_theme_portrait_subject_color(uint8_t level)
+{
+    return ui_theme_portrait_theme_color(s_ui_theme, level);
 }
 const char *ui_theme_name(ui_theme_t theme)
 {
