@@ -1027,4 +1027,6 @@ const passport_app_t g_xiaozhi_app = {
     .stop = xiaozhi_app_stop,
     .on_key = xiaozhi_app_on_key,
     .prepare_stop = xiaozhi_app_prepare_stop,
+    .key = "xiaozhi", .in_launcher = true, .openable = true, .toggleable = true,
+    .streaming = true, .heap_largest_kb = 16, .heap_free_kb = 64,
 };

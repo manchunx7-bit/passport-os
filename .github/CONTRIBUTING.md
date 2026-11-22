@@ -28,18 +28,23 @@ second development; the fork conventions are in
 Use ESP-IDF 5.5.3. For a clean-machine setup, follow the
 [environment bootstrap](../docs/development/engineering/environment-setup.md).
 
-Prefer the repository firmware gate for builds and flash its verified merged
-image at `0x0`. The direct IDF commands below are for incremental development.
+Prefer the repository firmware gate for builds. Flash a verified merged image at
+`0x0` only for a first install or full reset; updates that keep Wi-Fi, profiles,
+and cards must write the application image at `0x10000`. See the
+[safe flashing guide](../docs/safe-flashing.en.md). The direct IDF commands below
+are for incremental development.
 
 ```bash
 source <path-to-esp-idf-v5.5.3>/export.sh
 idf.py --version             # must report ESP-IDF v5.5.3
 ./tools/validate.sh --firmware # preferred merged-image build
-idf.py set-target esp32c3     # Configure the target chip (fresh checkout / after target change)
-idf.py build                  # Optional incremental application build
-idf.py flash monitor          # Optional incremental application flash
-idf.py fullclean              # Clear stale build state (never for user source changes)
+idf.py app-flash             # application partition only (0x10000)
+idf.py flash monitor         # optional full flash of the current build
+idf.py fullclean             # Clear stale build state (never for user source changes)
 ```
+
+`bash build.sh` locates ESP-IDF through `IDF_DIR`, `IDF_PATH`, or common install
+paths, so macOS, Linux, WSL, and Git Bash can use the same commands.
 
 The current baseline includes a pure-logic test that runs without hardware:
 

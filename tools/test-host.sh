@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Muse pairing tests compile against real IDF cJSON/mbedTLS sources.
+if [ -z "${IDF_PATH:-}" ]; then
+    for candidate in "$HOME"/.espressif/v*/esp-idf /opt/esp-idf; do
+        if [ -d "$candidate/components/json/cJSON" ]; then IDF_PATH="$candidate"; export IDF_PATH; break; fi
+    done
+fi
+gc_link=(-Wl,--gc-sections)
+if [ "$(uname -s)" = Darwin ]; then gc_link=(-Wl,-dead_strip); fi
 python3 tests/test_voice_memory.py
+python3 tests/test_build_scripts.py
 python3 tests/test_xiaozhi_face_power.py
 python3 tests/check_digit_font.py
 python3 tests/check_title_glyphs.py
 python3 tests/check_launcher_apps.py
+python3 tests/test_app_plugins.py
 test_dir="$(mktemp -d /tmp/passport-host.XXXXXX)"
 trap 'rm -rf -- "$test_dir"' EXIT
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined \
@@ -72,16 +82,21 @@ python3 tests/test_wifi_internet.py
 "$test_dir/captive-setup"
 node tests/test_profile_page.js
 node tests/test_portrait_pixels.js
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
+    -Imain tests/test_portrait_styles.c main/ui/ui_portrait.c -o "$test_dir/portrait-styles"
+"$test_dir/portrait-styles"
 python3 tests/test_card_gallery.py
 python3 tests/test_avatar_upload.py
 "${CC:-cc}" -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -Wno-unused-variable \
     -fsanitize=address,undefined -g -ffunction-sections -fdata-sections \
     -Itests/home_mocks -Itests/radio_mocks -Imain \
-    tests/test_home_storage.c -Wl,--gc-sections -lm -o "$test_dir/home-storage"
+    tests/test_home_storage.c "${gc_link[@]}" -lm -o "$test_dir/home-storage"
 "$test_dir/home-storage"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/vendor/cjson \
+    -c tests/vendor/cjson/cJSON.c -o "$test_dir/cjson.o"
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
     -Itests/vendor/cjson -Icomponents/esp-wifi-connect/include \
-    tests/test_phone_time.cc tests/vendor/cjson/cJSON.c -o "$test_dir/phone-time"
+    tests/test_phone_time.cc "$test_dir/cjson.o" -o "$test_dir/phone-time"
 "$test_dir/phone-time"
 python3 tests/test_city_catalog.py
 python3 tests/test_home_weather.py

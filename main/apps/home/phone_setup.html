@@ -56,10 +56,10 @@ a{color:var(--green)}
 .file-pick input,.sub input[type=file]{display:block;width:100%;min-height:44px;font-size:14px;cursor:pointer}
 input::file-selector-button{min-height:40px;border:0;background:var(--green);color:#fff;padding:8px 14px;border-radius:9px;margin-right:10px;font:inherit;font-size:14px}
 .portrait-presets{border:0;padding:0;margin:0;min-width:0}.portrait-presets legend{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;padding:0}
-.portrait-segments{display:grid;grid-template-columns:1fr 1fr 1.6fr;gap:4px;padding:4px;background:var(--field);border-radius:var(--r-s)}.portrait-segments label{position:relative;margin:0;min-width:0;cursor:pointer;color:var(--ink);font-weight:500}.portrait-segments input{position:absolute;opacity:0;width:1px;height:1px}.portrait-segments span{display:flex;align-items:center;justify-content:center;min-height:40px;padding:4px;font-size:13px;text-align:center;border-radius:9px}.portrait-segments input:checked+span{color:#fff;background:var(--green)}.portrait-segments input:focus-visible+span{outline:3px solid #4b8a62}
+.portrait-segments{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;background:var(--field);border-radius:var(--r-s)}.portrait-segments label{position:relative;margin:0;min-width:0;cursor:pointer;color:var(--ink);font-weight:500}.portrait-segments input{position:absolute;opacity:0;width:1px;height:1px}.portrait-segments span{display:flex;align-items:center;justify-content:center;min-height:40px;padding:4px;font-size:13px;text-align:center;border-radius:9px}.portrait-segments input:checked+span{color:#fff;background:var(--green)}.portrait-segments input:focus-visible+span{outline:3px solid #4b8a62}
 .crop-layout{display:flex;align-items:flex-end;justify-content:center;gap:16px;margin-top:14px}#vp{position:relative;width:192px;height:300px;overflow:hidden;border-radius:10px;background:#dde5d7;touch-action:none}#pv{position:absolute;pointer-events:none;user-select:none;max-width:none}#binc{width:96px;height:150px;border-radius:6px;background:#07170f;image-rendering:pixelated}
 .caption{display:block;text-align:center;font-size:12px;color:var(--muted);font-weight:400;margin:6px 0 0}
-input[type=range]{width:100%;min-height:36px}.check{display:flex;align-items:center;gap:8px;color:var(--ink);font-weight:400;font-size:14px;margin:0}
+input[type=range]{width:100%;min-height:36px}.slider{margin-top:14px}.slider-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.slider-head .caption{display:inline;margin:0;text-align:left}.slider-value{display:inline-flex;align-items:center;gap:3px}.slider-value input{width:68px;min-height:36px;padding:3px 6px;border:1px solid var(--line);border-radius:9px;background:var(--field);color:var(--ink);font:inherit;font-size:16px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}.slider-unit{font-size:12px;color:var(--muted);min-width:10px}.slider input[type=range]{display:block;width:100%;min-height:34px;margin:0}.slider-ticks{position:relative;height:8px;margin:-2px 9px 0}.slider-ticks i{position:absolute;top:0;width:1px;height:6px;background:#c3cbc3;transform:translateX(-.5px)}.check{display:flex;align-items:center;gap:8px;color:var(--ink);font-weight:400;font-size:14px;margin:0}
 #sharec{display:block;width:150px;height:200px;margin:0 auto;border-radius:8px;background:#fff;border:1px solid var(--line)}
 .saved{font-size:12.5px;color:var(--muted)}
 .card-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}.card-thumb{width:54px;height:72px;object-fit:contain;background:var(--field);border-radius:6px;flex-shrink:0}.card-meta{flex:1;min-width:0}.card-meta p{margin:0 0 6px;font-size:13px;color:var(--muted)}.card-actions{display:flex;flex-wrap:wrap;gap:6px}.card-actions button{min-height:34px;padding:4px 10px;font-size:13px;border:0;border-radius:8px;background:var(--field);color:var(--ink)}.card-actions .remove{color:var(--error)}.card-empty{color:var(--muted);font-size:13px}
@@ -113,13 +113,11 @@ input[type=range]{width:100%;min-height:36px}.check{display:flex;align-items:cen
 <div class="file-pick"><label for="file">选择一张清晰的人像</label><input type="file" id="file" name="portrait" accept="image/*" aria-describedby="avatarPickerHelp"></div>
 <details class="sub picker-help"><summary>选图没有反应？</summary><div class="detail-body"><label for="fileFallback">从文件选择</label><input type="file" id="fileFallback" name="portraitFile" aria-describedby="avatarPickerHelp"><p id="avatarPickerHelp" class="help">支持 JPEG、PNG。仍打不开时，用系统浏览器访问 192.168.4.1</p></div></details>
 <div id="photoTools" class="photo-tools" hidden>
-<fieldset class="portrait-presets"><legend>风格</legend><div class="portrait-segments">
-<label><input type="radio" name="portraitPreset" id="portraitPresetDot" value="1"><span>点阵</span></label>
-<label><input type="radio" name="portraitPreset" id="portraitPresetFlat" value="2"><span>平涂</span></label>
-<label><input type="radio" name="portraitPreset" id="portraitPresetHybrid" value="3" checked><span>平涂＋点阵</span></label>
-</div></fieldset>
+<fieldset class="portrait-presets"><legend>风格</legend><div class="portrait-segments" id="portraitStyles"></div></fieldset>
 <div class="crop-layout"><div id="vp" style="height:276px"><img id="pv" alt="人像取景预览"></div><div><canvas id="binc" width="96" height="138" style="height:138px" aria-label="设备人像预览"></canvas><p class="caption">设备效果</p></div></div>
-<label for="zm" class="caption">缩放</label><input type="range" id="zm" min="100" max="400" value="100"><label for="portraitBrightness" class="caption">明暗</label><input type="range" id="portraitBrightness" min="-48" max="48" value="0">
+<div class="slider"><div class="slider-head"><label for="zm" class="caption">缩放</label><span class="slider-value"><input type="number" id="zmValue" min="100" max="400" step="10" value="100" inputmode="numeric" aria-label="缩放数值"><span class="slider-unit">%</span></span></div><input type="range" id="zm" min="100" max="400" step="10" value="100"><div class="slider-ticks" id="zmTicks" aria-hidden="true"></div></div>
+<div class="slider"><div class="slider-head"><label for="portraitBrightness" class="caption">明暗</label><span class="slider-value"><input type="number" id="portraitBrightnessValue" min="-48" max="48" step="8" value="0" inputmode="numeric" aria-label="明暗数值"></span></div><input type="range" id="portraitBrightness" min="-48" max="48" step="8" value="0"><div class="slider-ticks" id="portraitBrightnessTicks" aria-hidden="true"></div></div>
+<div class="slider"><div class="slider-head"><label for="portraitColor" class="caption">颜色</label><span class="slider-value"><input type="number" id="portraitColorValue" min="0" max="100" step="10" value="50" inputmode="numeric" aria-label="颜色保留度"></span></div><input type="range" id="portraitColor" min="0" max="100" step="10" value="50"><div class="slider-ticks" id="portraitColorTicks" aria-hidden="true"></div></div>
 <label class="check"><input type="checkbox" id="portraitBackground"> 去除纯色背景</label></div>
 <p id="avatarStatus" class="status" role="status"></p></div></details>
 
@@ -305,7 +303,7 @@ $('retryMuse').onclick=()=>loadMuse();$('useSavedMuse').onclick=()=>loadMuse(tru
 $('museSection').ontoggle=()=>{if($('museSection').open&&!museLoaded)return loadMuse()};
 
 // Portrait cropping happens on the phone, preserving the device's small memory budget.
-const VP={w:192,h:276},PORTRAIT={w:96,h:138};let portraitPalette=[0x03120b,0x3a5b45,0x719c80,0xa8edbb],portraitSubjectPalette=[0x254d36,0x4b8060,0x80b795,0xa8edbb];let zoom=1,ox=0,oy=0,base=1,portrait=null,shareImg=null,imageLoading=0,portraitPreset=3,portraitSampleCache=null,portraitPreparedCache=null;
+const VP={w:192,h:276},PORTRAIT={w:96,h:138};let portraitPalette=[0x03120b,0x3a5b45,0x719c80,0xa8edbb],portraitStyles=[],portraitStyleInputs=[];let zoom=1,ox=0,oy=0,base=1,portrait=null,shareImg=null,imageLoading=0,portraitStyle=0,portraitSampleCache=null,portraitPreparedCache=null;
 const CARD_MAX=6,CARD_BYTES=24576;let cards=[],cardsDirty=false,cardsReady=false,cardBusy=false,replaceSlot=null,cardStorage=null;
 function clamp(){if(!portrait)return;const s=base*zoom;ox=Math.min(0,Math.max(VP.w-portrait.naturalWidth*s,ox));oy=Math.min(0,Math.max(VP.h-portrait.naturalHeight*s,oy));$('pv').style.width=portrait.naturalWidth*s+'px';$('pv').style.left=ox+'px';$('pv').style.top=oy+'px'}
 function portraitPixels(){
@@ -359,30 +357,98 @@ function portraitPrepare(data,w,h,removeBackground){
  for(let p=0;p<count;p++)smooth[p]=Math.max(0,Math.min(255,Math.round((smooth[p]-low)*255/(high-low))));
  portraitPreparedCache={data,w,h,removeBackground,mask,gray:portraitLocalContrast(smooth,mask,w,h)};return portraitPreparedCache;
 }
-function portraitLevels(data,w,h,removeBackground,brightness,preset=3){
- const {gray,mask}=portraitPrepare(data,w,h,removeBackground),levels=new Uint8Array(w*h),bayer=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
- for(let p=0;p<levels.length;p++)if(mask[p]){
-  const x=p%w,y=Math.floor(p/w),v=Math.max(0,Math.min(255,gray[p]+brightness)),t=(bayer[(y%4)*4+x%4]+.5)/16;
-  if(preset===1){const edge=(x>0&&!mask[p-1])||(x<w-1&&!mask[p+1])||(y>0&&!mask[p-w])||(y<h-1&&!mask[p+w]);levels[p]=.13+.78*(v/255)**.95>t||(edge&&(x+y)%3===0)?3:0}
-  else{const value=v+(preset===3?(t-.5)*34:0);levels[p]=value<57?0:value<124?1:value<190?2:3}
- }return {levels,mask};
+function portraitMedianPalette(colors,count){
+ const groups=[Array.from({length:count},(_,i)=>i)];
+ while(groups.length<15){
+  let pick=-1,range=-1,channel=0;
+  for(let g=0;g<groups.length;g++){
+   const group=groups[g];if(group.length<2)continue;
+   const low=[255,255,255],high=[0,0,0];
+   for(const i of group)for(let c=0;c<3;c++){const value=colors[i*3+c];if(value<low[c])low[c]=value;if(value>high[c])high[c]=value}
+   for(let c=0;c<3;c++)if(high[c]-low[c]>range){range=high[c]-low[c];pick=g;channel=c}
+  }
+  if(pick<0)break;
+  const group=groups[pick];group.sort((a,b)=>colors[a*3+channel]-colors[b*3+channel]);
+  const mid=group.length>>1;groups.splice(pick,1,group.slice(0,mid),group.slice(mid));
+ }
+ const palette=new Uint32Array(16);
+ groups.forEach((group,i)=>{let r=0,g=0,b=0;for(const n of group){r+=colors[n*3];g+=colors[n*3+1];b+=colors[n*3+2]}const size=group.length||1;palette[i+1]=(Math.round(r/size)<<16)|(Math.round(g/size)<<8)|Math.round(b/size)});
+ return palette;
+}
+function portraitColorPixels(data,tone,mask,w,h,retention){
+ let used=0;for(let p=0;p<mask.length;p++)if(mask[p])used++;
+ const colors=new Uint8Array(used*3),positions=new Uint32Array(used),keep=retention/100;let n=0;
+ for(let p=0;p<mask.length;p++)if(mask[p]){
+  const i=p*4,r=data[i],g=data[i+1],b=data[i+2],y=(r*77+g*151+b*28)>>8,v=tone[p];
+  positions[n]=p;colors[n*3]=Math.max(0,Math.min(255,Math.round(v+(r-y)*keep)));colors[n*3+1]=Math.max(0,Math.min(255,Math.round(v+(g-y)*keep)));colors[n*3+2]=Math.max(0,Math.min(255,Math.round(v+(b-y)*keep)));n++;
+ }
+ const palette=portraitMedianPalette(colors,used),indices=new Uint8Array(mask.length);
+ for(let n=0;n<used;n++){
+  const r=colors[n*3],g=colors[n*3+1],b=colors[n*3+2];let best=1,bestDistance=Infinity;
+  for(let i=1;i<16;i++){const c=palette[i],dr=r-(c>>16),dg=g-((c>>8)&255),db=b-(c&255),distance=dr*dr+dg*dg+db*db;if(distance<bestDistance){best=i;bestDistance=distance}}
+  indices[positions[n]]=best;
+ }
+ return {indices,palette};
+}
+function portraitThemePixels(tone,mask,w,h,style){
+ const entry=portraitStyles.find(s=>s.id===style),colors=entry?.palette?.length===4?entry.palette:portraitPalette,palette=new Uint32Array(16),indices=new Uint8Array(tone.length),bayer=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+ for(let i=0;i<4;i++)palette[i+1]=colors[i];
+ for(let p=0;p<tone.length;p++)if(mask[p]){const x=p%w,y=(p/w)|0,v=tone[p]+(((bayer[(y%4)*4+x%4]+.5)/16)-.5)*34;indices[p]=(v<57?0:v<124?1:v<190?2:3)+1}
+ return {indices,palette};
+}
+function portraitPixelsForDevice(data,w,h,removeBackground,brightness,retention,style){
+ const {gray,mask}=portraitPrepare(data,w,h,removeBackground),tone=new Uint8Array(w*h);
+ for(let p=0;p<tone.length;p++)if(mask[p])tone[p]=Math.max(0,Math.min(255,gray[p]+brightness));
+ return style>0?portraitThemePixels(tone,mask,w,h,style):portraitColorPixels(data,tone,mask,w,h,retention);
 }
 function portraitPacked(){
- const {levels,mask}=portraitLevels(portraitPixels(),PORTRAIT.w,PORTRAIT.h,$('portraitBackground').checked,Number($('portraitBrightness').value)||0,portraitPreset),count=PORTRAIT.w*PORTRAIT.h,packed=new Uint8Array(8+count/4+count/8);
- packed.set([80,84,51,53,portraitPreset,0,0,0]);for(let p=0;p<count;p++){packed[8+(p>>2)]|=levels[p]<<(6-2*(p&3));if(mask[p])packed[8+count/4+(p>>3)]|=128>>(p&7)}return packed;
+ const retention=Math.max(0,Math.min(100,Math.round(Number($('portraitColor').value)||0))),count=PORTRAIT.w*PORTRAIT.h,{indices,palette}=portraitPixelsForDevice(portraitPixels(),PORTRAIT.w,PORTRAIT.h,$('portraitBackground').checked,Number($('portraitBrightness').value)||0,retention,portraitStyle),packed=new Uint8Array(40+count/2);
+ packed.set([80,84,51,54,portraitStyle,retention,0,0]);
+ for(let i=1;i<16;i++){const c=palette[i],v=((((c>>16)&0xf8)<<8)|(((c>>8)&0xfc)<<3)|((c&0xff)>>3));packed[8+(i-1)*2]=v&255;packed[9+(i-1)*2]=v>>8}
+ for(let p=0;p<count;p++)packed[40+(p>>1)]|=indices[p]<<(p&1?0:4);
+ return packed;
 }
 function portraitColor(packed,p){
- const count=PORTRAIT.w*PORTRAIT.h,visible=packed[8+count/4+(p>>3)]&(128>>(p&7)),level=(packed[8+(p>>2)]>>(6-2*(p&3)))&3;
- return !visible||(packed[4]===1&&!level)?portraitPalette[0]:portraitSubjectPalette[level];
+ const index=(packed[40+(p>>1)]>>(p&1?0:4))&15;
+ if(!index)return portraitPalette[0];
+ const c=packed[8+(index-1)*2]|(packed[9+(index-1)*2]<<8),r=(c>>11)&31,g=(c>>5)&63,b=c&31;
+ return (Math.round(r*255/31)<<16)|(Math.round(g*255/63)<<8)|Math.round(b*255/31);
 }
 function previewPortrait(){if(!portrait)return;const packed=portraitPacked(),g=$('binc').getContext('2d'),o=g.createImageData(PORTRAIT.w,PORTRAIT.h);for(let p=0;p<PORTRAIT.w*PORTRAIT.h;p++){const color=portraitColor(packed,p),i=p*4;o.data[i]=color>>16;o.data[i+1]=(color>>8)&255;o.data[i+2]=color&255;o.data[i+3]=255}g.putImageData(o,0,0)}
-function setPortraitPreset(value){portraitPreset=[1,2,3].includes(value)?value:3;for(const [i,id] of ['portraitPresetDot','portraitPresetFlat','portraitPresetHybrid'].entries())$(id).checked=portraitPreset===i+1;previewPortrait()}
-for(const [i,id] of ['portraitPresetDot','portraitPresetFlat','portraitPresetHybrid'].entries())$(id).onchange=()=>{if($(id).checked)setPortraitPreset(i+1)};
-$('portraitBrightness').oninput=previewPortrait;$('portraitBackground').onchange=previewPortrait;
+function renderPortraitStyles(){
+ const box=$('portraitStyles');if(!box)return;
+ box.replaceChildren();portraitStyleInputs=[];
+ for(const style of portraitStyles){
+  const label=document.createElement('label'),input=document.createElement('input'),text=document.createElement('span');
+  input.type='radio';input.name='portraitStyle';input.value=String(style.id);input.id='portraitStyle'+style.id;
+  input.checked=style.id===portraitStyle;
+  input.onchange=()=>{if(input.checked)setPortraitStyle(style.id)};
+  text.textContent=style.label;
+  label.appendChild(input);label.appendChild(text);box.appendChild(label);portraitStyleInputs.push(input);
+ }
+}
+function setPortraitStyle(value){
+ const id=Number(value),match=portraitStyles.find(style=>style.id===id);
+ portraitStyle=match?match.id:0;
+ for(const input of portraitStyleInputs)input.checked=Number(input.value)===portraitStyle;
+ previewPortrait();
+}
+$('portraitBrightness').oninput=previewPortrait;$('portraitColor').oninput=previewPortrait;$('portraitBackground').onchange=previewPortrait;
 async function imageFile(input){const file=input.files[0];if(!file)return null;if(!file.size)throw new Error('图片文件为空，请重新选择。');if(file.size>20*1024*1024)throw new Error('图片超过 20 MB，请选择较小的图片。');const url=URL.createObjectURL(file);let timer;imageLoading++;try{const img=new Image();await new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(new Error('读取图片超时，请将图片保存到手机本地后重试。')),15000);img.onload=resolve;img.onerror=()=>reject(new Error('无法读取图片，请换一张 JPEG 或 PNG 图片。'));img.src=url});if(!img.naturalWidth||!img.naturalHeight)throw new Error('图片尺寸无效，请重新选择。');return img}catch(e){URL.revokeObjectURL(url);throw e}finally{clearTimeout(timer);imageLoading--}}
-async function selectPortrait(input){say('avatarStatus','正在读取图片…');try{const img=await imageFile(input);if(!img){say('avatarStatus',portrait?'已保留之前选择的人像。':'未选择图片。');return}if(portrait)URL.revokeObjectURL(portrait.src);portrait=img;$('pv').src=img.src;base=Math.max(VP.w/img.naturalWidth,VP.h/img.naturalHeight);zoom=1;$('zm').value=100;ox=(VP.w-img.naturalWidth*base)/2;oy=(VP.h-img.naturalHeight*base)/2;clamp();previewPortrait();$('photoTools').hidden=false;say('avatarStatus','已选择，将在完成设置时保存。')}catch(e){input.value='';say('avatarStatus',e.message,true)}}
+async function selectPortrait(input){say('avatarStatus','正在读取图片…');try{const img=await imageFile(input);if(!img){say('avatarStatus',portrait?'已保留之前选择的人像。':'未选择图片。');return}if(portrait)URL.revokeObjectURL(portrait.src);portrait=img;$('pv').src=img.src;base=Math.max(VP.w/img.naturalWidth,VP.h/img.naturalHeight);zoom=1;$('zm').value=100;syncStepSliders();ox=(VP.w-img.naturalWidth*base)/2;oy=(VP.h-img.naturalHeight*base)/2;clamp();previewPortrait();$('photoTools').hidden=false;say('avatarStatus','已选择，将在完成设置时保存。')}catch(e){input.value='';say('avatarStatus',e.message,true)}}
 $('zm').oninput=()=>{if(!portrait)return;const z=Number($('zm').value)/100;ox=VP.w/2-(VP.w/2-ox)*z/zoom;oy=VP.h/2-(VP.h/2-oy)*z/zoom;zoom=z;clamp();previewPortrait()};let drag=null;
 $('vp').onpointerdown=e=>{if(!portrait)return;drag={x:e.clientX,y:e.clientY,ox,oy};$('vp').setPointerCapture(e.pointerId)};$('vp').onpointermove=e=>{if(!drag)return;ox=drag.ox+e.clientX-drag.x;oy=drag.oy+e.clientY-drag.y;clamp()};$('vp').onpointerup=$('vp').onpointercancel=()=>{if(drag){drag=null;previewPortrait()}};
+function bindStepSlider(id){
+ const range=$(id),num=$(id+'Value'),ticks=$(id+'Ticks'),min=Number(range.min),max=Number(range.max),step=Number(range.step)||1,segments=(max-min)/step;
+ if(ticks&&ticks.replaceChildren&&segments>0){ticks.replaceChildren();for(let i=0;i<=segments;i++){const mark=document.createElement('i');mark.style.left=(i*100/segments)+'%';ticks.appendChild(mark)}}
+ const paint=()=>{num.value=range.value};
+ const apply=()=>{const raw=String(num.value).trim();if(!raw)return paint();let v=Number(raw);if(!Number.isFinite(v))return paint();const min=Number(range.min),max=Number(range.max),step=Number(range.step)||1;v=min+Math.round((v-min)/step)*step;v=Math.max(min,Math.min(max,v));if(String(v)!==range.value){range.value=String(v);range.oninput?.()}paint()};
+ num.onchange=apply;num.onblur=apply;
+ const base=range.oninput;range.oninput=e=>{base?.call(range,e);paint()};
+ paint();
+}
+for(const id of ['zm','portraitBrightness','portraitColor'])bindStepSlider(id);
+function syncStepSliders(){for(const id of ['zm','portraitBrightness','portraitColor']){const num=$(id+'Value');if(num)num.value=$(id).value}}
 function drawShare(){const c=$('sharec'),g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,240,320);const scale=Math.min(240/shareImg.naturalWidth,320/shareImg.naturalHeight),w=Math.round(shareImg.naturalWidth*scale),h=Math.round(shareImg.naturalHeight*scale);g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(shareImg,Math.floor((240-w)/2),Math.floor((320-h)/2),w,h)}
 function cardUrl(slot){return '/api/share?slot='+slot+'&t='+encodeURIComponent(window.__T||'')}
 function galleryUsage(){const total=cards.reduce((n,c)=>n+c.bytes,0);$('shareState').textContent=cards.length+' / '+CARD_MAX+' 张';$('cardUsage').textContent='已选 '+cards.length+' / '+CARD_MAX+' 张 · '+(total/1024).toFixed(1)+' / 144 KB'+(cardStorage?' · 设备剩余约 '+Math.floor(cardStorage.storage_free/1024)+' KB':'');}
@@ -440,7 +506,7 @@ async function shareBlob(){
 }
 async function save(){if(imageLoading||cardBusy){say('saveStatus','图片还在读取，请稍等。',true);return}if(!verified&&!hasSaved){step(1);say('networkStatus','请先连接 Wi-Fi。',true);return}let selected;try{selected=selectedCityProfile()}catch(e){say('saveStatus',e.message,true);return}const profile={name:$('name').value,signature:$('sig').value,address:loadedProfile.address||'',...selected};for(const [key,max] of [['name',31],['signature',95],['address',127],['city',47],['region',31],['radio_city',47],['lat',15],['lon',15]])if(bytes(profile[key])>max){say('saveStatus','有一项内容过长，请缩短后再保存。',true);return}$('save').disabled=true;$('back').disabled=true;try{renderCards();if(pendingMuseConfig()){say('saveStatus','正在保存 Muse 配置…');await saveMuseConfig(true)}say('saveStatus','正在保存个人资料…');await api('/api/profile',profile);if(portrait){say('saveStatus','正在保存人像…');await api('/api/avatar',portraitPacked())}await saveCards();say('saveStatus','正在完成设置…');await api('/api/finish',{});$('doneName').textContent=profile.name||'AI 护照';$('doneSummary').textContent='个人资料'+(portrait?'、人像':'')+(cards.length?'、'+cards.length+' 张彩色名片':'')+'已保存';step(3)}catch(e){say('saveStatus',e.message+' 尚未完成的内容可再次保存。',true)}finally{$('save').disabled=false;$('back').disabled=false;renderCards()}}
 $('save').onclick=()=>{cancelLocation();return save()};
-async function load(){try{const [profile,state]=await Promise.all([api('/api/profile'),api('/api/setup')]);await loadCities();for(const [id,key] of [['name','name'],['sig','signature']])$(id).value=profile[key]||'';if(Array.isArray(profile.portrait_palette)&&profile.portrait_palette.length===4)portraitPalette=profile.portrait_palette;if(Array.isArray(profile.portrait_subject_palette)&&profile.portrait_subject_palette.length===4)portraitSubjectPalette=profile.portrait_subject_palette;previewPortrait();restoreCity(profile);$('avatarState').textContent=profile.avatar?'已有，可替换':'可稍后上传';await loadCards();hasSaved=state.saved_network;$('reuse').hidden=!hasSaved;$('keepSaved').hidden=!hasSaved;$('savedField').hidden=!hasSaved;const selected=$('savedNetwork').value;$('savedNetwork').replaceChildren(new Option('自动选择附近已保存的网络',''));for(const name of state.saved_networks||[])$('savedNetwork').add(new Option(name,name));if((state.saved_networks||[]).includes(selected))$('savedNetwork').value=selected;$('connect').disabled=false;say('networkStatus','');if(state.finishing){step(3);return}if(state.state==='connected')networkReady('已连接 '+state.ssid);else if(state.state==='connecting'){lockNetwork(true);polls=0;pollTimer=setTimeout(poll,1000)}await scan()}catch(e){say('networkStatus','无法读取设备。请确认手机已连接设备热点，然后刷新页面。',true)}}
+async function load(){try{const [profile,state]=await Promise.all([api('/api/profile'),api('/api/setup')]);await loadCities();for(const [id,key] of [['name','name'],['sig','signature']])$(id).value=profile[key]||'';if(Array.isArray(profile.portrait_palette)&&profile.portrait_palette.length===4)portraitPalette=profile.portrait_palette;if(Array.isArray(profile.portrait_styles)){portraitStyles=profile.portrait_styles.filter(style=>style&&Number.isInteger(style.id)&&style.id>=0&&style.id<16&&typeof style.label==='string'&&style.label&&Array.isArray(style.palette)&&style.palette.length===4&&style.palette.every(Number.isInteger))}renderPortraitStyles();setPortraitStyle(portraitStyle);restoreCity(profile);$('avatarState').textContent=profile.avatar?'已有，可替换':'可稍后上传';await loadCards();hasSaved=state.saved_network;$('reuse').hidden=!hasSaved;$('keepSaved').hidden=!hasSaved;$('savedField').hidden=!hasSaved;const selected=$('savedNetwork').value;$('savedNetwork').replaceChildren(new Option('自动选择附近已保存的网络',''));for(const name of state.saved_networks||[])$('savedNetwork').add(new Option(name,name));if((state.saved_networks||[]).includes(selected))$('savedNetwork').value=selected;$('connect').disabled=false;say('networkStatus','');if(state.finishing){step(3);return}if(state.state==='connected')networkReady('已连接 '+state.ssid);else if(state.state==='connecting'){lockNetwork(true);polls=0;pollTimer=setTimeout(poll,1000)}await scan()}catch(e){say('networkStatus','无法读取设备。请确认手机已连接设备热点，然后刷新页面。',true)}}
 $('copyVoiceTutorial').onclick=async()=>{
  const link=$('voiceTutorialLink'),url='https://github.com/manchunx7-bit/passport-os';
  let copied=false;

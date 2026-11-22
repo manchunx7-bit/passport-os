@@ -382,4 +382,6 @@ const passport_app_t g_voice_app = {
     .stop = voice_app_stop,
     .on_key = voice_app_on_key,
     .prepare_stop = voice_app_prepare_stop,
+    .key = "voice", .in_launcher = true, .openable = true, .toggleable = true,
+    .default_enabled = true, .streaming = true,
 };

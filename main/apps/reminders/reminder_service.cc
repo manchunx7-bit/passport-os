@@ -190,6 +190,12 @@ void play_music_notice(bool (*cancelled)()) {
 }
 void poll() {
     if(!mutex)return;
+    // A hidden plugin must not surface UI, sound or app switches. Saved
+    // reminders stay in NVS and resume when the user re-enables it.
+    if(!app_registry_enabled(APP_ID_REMINDERS)) {
+        if(active.load()) finish_alert();
+        return;
+    }
     const int64_t mono=esp_timer_get_time();
     Record current{};
     if(active.load()) {

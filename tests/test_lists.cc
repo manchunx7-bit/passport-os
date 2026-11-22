@@ -2,9 +2,15 @@
 #include "../main/apps/reminders/reminder_core.cc"
 #include "../main/apps/lists/list_service.cc"
 #include "../main/apps/lists/list_mcp.cc"
+static bool lists_enabled=true;
+extern "C" bool app_registry_enabled(passport_app_id_t id){return id==APP_ID_LISTS?lists_enabled:true;}
 static std::string invoke(const char *name,const char *args){auto *j=cJSON_Parse(args);auto r=lists::call(name,j);cJSON_Delete(j);return r;}
 int main(){
     using namespace lists;initialize();const char *error=nullptr;uint32_t id=0;
+    assert(tool_count()==3);
+    lists_enabled=false;assert(tool_count()==0);
+    assert(invoke("self.list.read","{}").find("已在设置中关闭")!=std::string::npos);
+    lists_enabled=true;
     const char *items[]={"牛奶两盒","鸡蛋十个","雨伞"};
     fail_write=true;assert(!create("购物清单",items,3,&id,&error));fail_write=false;
     Summary summaries[kLists]{};size_t count=0;assert(catalog(summaries,&count,&error)&&count==0);

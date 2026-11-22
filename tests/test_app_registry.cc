@@ -21,7 +21,27 @@ static void key(uint8_t,app_btn_event_t,uint16_t){++keys;if(key_opens_launcher)a
 static netease::Page music_page=netease::Page::Lists;
 static int music_back_calls=0;
 static bool music_back(){++music_back_calls;if(music_page==netease::Page::Lists)return false;music_page=netease::back_page(music_page,true);return true;}
-static passport_app_t app(passport_app_id_t id){passport_app_t a{};a.id=id;a.name="test";a.start=start;a.stop=stop;a.on_key=key;a.prepare_stop=prepare;if(id==APP_ID_NETEASE)a.on_back=music_back;return a;}
+static const char *key_for(passport_app_id_t id){
+ switch(id){
+  case APP_ID_XIAOZHI:return"xiaozhi";case APP_ID_RADIO:return"radio";case APP_ID_NETEASE:return"music";
+  case APP_ID_VOICE:return"voice";case APP_ID_MUSE:return"muse";case APP_ID_POMODORO:return"pomodoro";
+  case APP_ID_STOPWATCH:return"stopwatch";case APP_ID_REMINDERS:return"reminders";case APP_ID_LISTS:return"lists";
+  case APP_ID_TETRIS:return"tetris";case APP_ID_GAME:return"game";case APP_ID_SOUND_JUMP:return"sound_jump";
+  case APP_ID_SETTINGS:return"settings";case APP_ID_HOME:return"home";case APP_ID_WIFI:return"wifi";
+  default:return"";
+ }
+}
+static passport_app_t app(passport_app_id_t id){
+ passport_app_t a{};a.id=id;a.name="test";a.start=start;a.stop=stop;a.on_key=key;a.prepare_stop=prepare;
+ a.key=key_for(id);a.in_launcher=id!=APP_ID_HOME&&id!=APP_ID_WIFI;a.openable=id!=APP_ID_WIFI;
+ a.toggleable=id!=APP_ID_HOME&&id!=APP_ID_WIFI&&id!=APP_ID_SETTINGS;a.default_enabled=true;
+ a.allow_toast=id==APP_ID_HOME||id==APP_ID_SETTINGS||id==APP_ID_STOPWATCH||id==APP_ID_POMODORO||
+  id==APP_ID_TETRIS||id==APP_ID_REMINDERS||id==APP_ID_LISTS;
+ a.streaming=id==APP_ID_RADIO||id==APP_ID_NETEASE||id==APP_ID_VOICE||id==APP_ID_XIAOZHI||id==APP_ID_MUSE;
+ if(id==APP_ID_XIAOZHI){a.heap_largest_kb=16;a.heap_free_kb=64;}
+ if(id==APP_ID_RADIO||id==APP_ID_NETEASE){a.heap_largest_kb=24;a.heap_free_kb=48;}
+ if(id==APP_ID_MUSE){a.heap_largest_kb=20;a.heap_free_kb=44;}
+ if(id==APP_ID_NETEASE)a.on_back=music_back;return a;}
 const passport_app_t g_radio_app=app(APP_ID_RADIO),g_voice_app=app(APP_ID_VOICE),g_xiaozhi_app=app(APP_ID_XIAOZHI),
  g_wifi_app=app(APP_ID_WIFI),g_settings_app=app(APP_ID_SETTINGS),g_home_app=app(APP_ID_HOME),g_game_app=app(APP_ID_GAME),
  g_tetris_app=app(APP_ID_TETRIS),g_stopwatch_app=app(APP_ID_STOPWATCH),g_sound_jump_app=app(APP_ID_SOUND_JUMP),g_muse_app=app(APP_ID_MUSE),g_pomodoro_app=app(APP_ID_POMODORO),
@@ -56,7 +76,26 @@ int main(){
   assert(app_registry_background_idle()==!streaming);
  }
  s_active_id.store(APP_ID_LAUNCHER);s_screen_on.store(true);
- app_registry_init();app_registry_switch_to(APP_ID_HOME);assert(starts==1);
+ app_registry_init();
+ // Every launcher app except Settings can be toggled, all default on, and the
+ // choice persists through NVS. System screens and Settings stay permanent.
+ assert(app_registry_enabled(APP_ID_VOICE)&&app_registry_enabled(APP_ID_MUSE));
+ assert(app_registry_get_count()==13&&app_registry_toggle_count()==12);
+ assert(!app_registry_set_enabled(APP_ID_HOME,false));
+ assert(!app_registry_set_enabled(APP_ID_SETTINGS,false));
+ assert(app_registry_set_enabled(APP_ID_RADIO,false));
+ assert(!app_registry_enabled(APP_ID_RADIO)&&app_registry_get_count()==12);
+ load_enabled();
+ assert(!app_registry_enabled(APP_ID_RADIO));
+ assert(app_registry_set_enabled(APP_ID_RADIO,true));
+ assert(app_registry_enabled(APP_ID_VOICE)&&app_registry_enabled(APP_ID_MUSE));
+ assert(app_registry_openable_count()==14);
+ assert(!std::strcmp(app_registry_key(APP_ID_NETEASE),"music"));
+ assert(!std::strcmp(app_registry_key(APP_ID_LAUNCHER),"launcher"));
+ assert(!app_registry_set_enabled(APP_ID_COUNT,true));
+ mock_nvs_fail=true;assert(!app_registry_set_enabled(APP_ID_VOICE,false));mock_nvs_fail=false;
+ assert(app_registry_enabled(APP_ID_VOICE));
+ app_registry_switch_to(APP_ID_HOME);assert(starts==1);
  mock_reminder_active=true;assert(!app_registry_sound_notice()&&alarm_attempts==0);mock_reminder_active=false;
  assert(mock_socket_cleanups==2);
  auto *old=mock_active;const int before_stops=stops;
@@ -306,6 +345,14 @@ int main(){
  assert(app_registry_take_clean_launch()==APP_ID_MUSE);
  app_registry_switch_to(APP_ID_MUSE);assert(app_registry_get_active()==APP_ID_MUSE&&mock_restarts==3);
  mock_largest=40000;mock_free=100000;
+ // A foreground plugin cannot be hidden, and reset restores the default (on).
+ assert(!app_registry_set_enabled(APP_ID_MUSE,false));
+ app_registry_switch_to(APP_ID_HOME);
+ assert(app_registry_set_enabled(APP_ID_VOICE,false));
+ assert(!app_registry_enabled(APP_ID_VOICE)&&app_registry_get_count()==12);
+ assert(app_registry_reset_toggles());
+ assert(app_registry_enabled(APP_ID_VOICE)&&app_registry_enabled(APP_ID_MUSE));
+ assert(app_registry_get_count()==13&&app_registry_openable_count()==14);
  mock_active=nullptr;for(auto *p:mock_screens)delete p;mock_screens.clear();
  delete s_switch_mutex;delete s_display_awake_lock;
  puts("Registry: pending worker gate, feedback ownership, single click, wake gesture, latest target and screen lifecycle, clean launch PASS");

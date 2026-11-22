@@ -1,6 +1,10 @@
 """Exercise real bounded allocator wrappers with the same link interception as IDF."""
 from pathlib import Path
+import platform
 import subprocess,tempfile
+if platform.system()=='Darwin':
+    print('Muse TLS fixed storage: SKIP (GNU ld --wrap interception is Linux-only)')
+    raise SystemExit(0)
 root=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory() as tmp:
     d=Path(tmp)

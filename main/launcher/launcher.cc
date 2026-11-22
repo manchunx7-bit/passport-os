@@ -73,19 +73,9 @@ void draw_neighbour_chevron(lv_event_t *event) {
 }
 
 const char *app_chinese_name(passport_app_id_t id) {
-    // 2026-09-13 修复(D1):名称原本在 launcher 里硬编码一份、在 passport_app_t
-    // 里又各写一份,两边悄悄跑偏(注册表"城市收音机" vs 抽屉"收音机",
-    // "随身 AI 语音" vs "AI语音")。改成**以注册表为唯一来源**,只有没注册进
-    // 注册表的内置页(配网/设置)才走兜底表。
+    // 注册表是唯一名称来源;所有应用(含配网/设置)都已登记。
     const passport_app_t *app = app_registry_get_by_id(id);
-    if (app != nullptr && app->name != nullptr && app->name[0] != '\0') {
-        return app->name;
-    }
-    switch (id) {
-        case APP_ID_WIFI: return "无线网络";
-        case APP_ID_SETTINGS: return "设置";
-        default: return "";
-    }
+    return app && app->name ? app->name : "";
 }
 
 // Shared neon accents stay outside every application's 88x88 icon geometry.
@@ -371,12 +361,32 @@ constexpr IconGlyph kIconGlyphs[] = {
     }},
 };
 
+// New plugins without bespoke art still get a readable card instead of a blank icon.
+constexpr IconGlyph kFallbackGlyph = {APP_ID_COUNT, {
+    ".................",
+    ".................",
+    "....#########....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#########....",
+    ".................",
+    ".................",
+    ".................",
+}};
+
 // The icon is drawn into its existing object; no per-part heap allocations.
 void draw_app_icon_event(lv_event_t *event) {
-    const IconGlyph *glyph = nullptr;
+    const IconGlyph *glyph = &kFallbackGlyph;
     for (const IconGlyph &g : kIconGlyphs)
         if (g.id == s_icon_id) glyph = &g;
-    if (!glyph) return;
     pixel_scene::Ink ink(event);
     for (int y = 0; y < kGlyphCells; ++y) {
         const char *row = glyph->rows[y];

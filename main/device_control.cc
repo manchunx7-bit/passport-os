@@ -135,7 +135,8 @@ void poll() {
         const bool handover = command.action == Action::Handover;
         const passport_app_id_t app = handover ? command.handover.app : command.app;
         if (reminders::alarm_active()) completed.error = Error::Alarm;
-        else if (!command.token || (app != APP_ID_LAUNCHER && !app_registry_get_by_id(app)))
+        else if (!command.token ||
+                 (app != APP_ID_LAUNCHER && (!app_registry_get_by_id(app) || !app_registry_enabled(app))))
             completed.error = Error::UnknownApp;
         else if (app == APP_ID_XIAOZHI) completed.error = Error::AlreadyOpen;
         else {

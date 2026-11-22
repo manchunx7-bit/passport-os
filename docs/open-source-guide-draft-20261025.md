@@ -20,7 +20,11 @@
 
 不要混用不同版本的完整镜像、应用镜像和分区表。完整镜像会覆盖设备配置；需要保留 Wi-Fi、头像、名片或游戏记录时，应使用应用镜像并先确认分区表一致。
 
-## Windows 安装
+## 烧录镜像
+
+完整镜像写入 `0x0`，应用镜像只写 `0x10000`。下面给出 Windows 命令；macOS / Linux、备份与误刷恢复见 [安全刷机指南](safe-flashing.zh_CN.md)。
+
+### Windows
 
 1. 安装 Python 3.11 或更新版本。
 2. 打开 PowerShell，安装 esptool：
@@ -54,6 +58,32 @@ py -m esptool --chip esp32c3 --port COM3 --baud 460800 write-flash `
 
 烧录期间不要拔 USB。写入成功后设备会自动复位；如果串口暂时没有输出，重新插拔 USB 再观察设备屏幕。
 
+### macOS / Linux
+
+```bash
+python3 -m pip install --user esptool
+ls /dev/cu.usbmodem*        # macOS；Linux 用 ls /dev/ttyUSB* /dev/ttyACM*
+```
+
+首次安装或清空数据时执行（完整镜像写 `0x0`）：
+
+```bash
+python3 -m esptool --chip esp32c3 -p /dev/cu.usbmodem101 --baud 460800 erase-flash
+python3 -m esptool --chip esp32c3 -p /dev/cu.usbmodem101 --baud 460800 \
+  write_flash --flash_mode dio --flash_freq 80m --flash_size 8MB \
+  0x0 FoloToy-AI-Passport-vX.Y.Z-full.bin
+```
+
+普通升级只写应用区（保留 Wi-Fi 和资料）：
+
+```bash
+python3 -m esptool --chip esp32c3 -p /dev/cu.usbmodem101 --baud 460800 \
+  write_flash --flash_mode dio --flash_freq 80m --flash_size 8MB \
+  0x10000 FoloToy-AI-Passport-vX.Y.Z-app.bin
+```
+
+Linux 提示权限不足时，把当前用户加入 `dialout` 组并重新登录。WSL 默认看不到串口，需要 `usbipd` 绑定，或直接在 Windows 上烧录。
+
 ## 首次启动
 
 首次启动会进入手机设置页面，并启动一个没有密码的热点，例如 `Passport-WiFi-D7A9`：
@@ -75,7 +105,7 @@ py -m esptool --chip esp32c3 --port COM3 --baud 460800 write-flash `
 
 ## 从源码构建
 
-源码开发者需要 ESP-IDF 5.5.3、Python 3、Git，以及 Linux、WSL 或其他能够运行 ESP-IDF 的环境：
+源码开发者需要 ESP-IDF 5.5.3、Python 3、Git，以及 Linux、macOS、WSL 或其他能够运行 bash 的环境：
 
 ```bash
 git clone https://github.com/manchunx7-bit/passport-os.git
@@ -83,7 +113,7 @@ cd passport-os
 bash build.sh release
 ```
 
-`bash build.sh release` 默认从 `/opt/esp-idf` 加载环境；如果 ESP-IDF 安装在其他目录，使用 `IDF_DIR=/实际路径/esp-idf bash build.sh release` 指定。
+`build.sh` 依次从 `IDF_DIR`、`IDF_PATH` 和常见安装位置查找 ESP-IDF，并兼容 macOS 的 EIM 安装；装在其它目录时用 `IDF_DIR=/实际路径/esp-idf bash build.sh release` 指定。
 
 此命令的完整镜像输出到 `build-public/FoloToy-AI-Passport-full.bin`，应用镜像输出到 `build-public/passport-os.bin`。构建前会根据 `dependencies.lock` 获取 ESP-IDF 组件；不要把本机 `managed_components/` 或生成的 `sdkconfig` 提交到仓库。
 

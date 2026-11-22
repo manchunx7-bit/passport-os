@@ -16,6 +16,7 @@ prelude = r'''
 #include <cstring>
 #include <set>
 #define HOME_AVATAR_BYTES 4976
+#define HOME_AVATAR_MAX_BYTES 6664
 #define HOME_PORTRAIT_PIXELS 14400
 #define HOME_PORTRAIT_I4_BYTES 7264
 #define HOME_PORTRAIT_W 120
@@ -38,7 +39,8 @@ static int allocations,fail_at,version=1;
 static std::set<void*>live;
 static void *allocate(size_t n){if(++allocations==fail_at)return nullptr;void*p=malloc(n);assert(p);live.insert(p);return p;}
 static void release(void*p){if(p){assert(p!=displayed);assert(live.erase(p)==1);free(p);}}
-static int home_profile_read_avatar(uint8_t*p,size_t n){assert(n==4976);if(fail_read)return ESP_FAIL;memset(p,0,n);p[4]=version;return ESP_OK;}
+static inline bool home_portrait_is_color(const uint8_t*d){return d[0]=='P'&&d[1]=='T'&&d[2]=='3'&&d[3]=='6';}
+static int home_profile_read_avatar(uint8_t*p,size_t n){assert(n==HOME_AVATAR_MAX_BYTES);if(fail_read)return ESP_FAIL;memset(p,0,n);p[4]=version;return ESP_OK;}
 static void lv_image_set_src(void*,const void*p){displayed=p;}
 static void lv_image_cache_drop(const void*){}
 static void lv_obj_set_style_image_recolor(void*,int,int){}

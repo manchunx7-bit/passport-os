@@ -38,7 +38,7 @@ typedef enum {
     BTN_EVT_DOUBLE, // resolved by ADC task; reserved for global OK shortcut
 } app_btn_event_t;
 
-typedef struct {
+typedef struct passport_app_s {
     passport_app_id_t id;
     const char *name;           // 中文显示名称
     const char *en_name;        // 英文标签
@@ -60,6 +60,30 @@ typedef struct {
 #else
     bool (*prepare_stop)(void);
     bool (*on_back)(void);
+#endif
+
+    // 插件元数据:注册表、设置页和设备控制都只读这些字段,
+    // 不再按 app id 写 switch,新增应用只改自己的描述符。
+#ifdef __cplusplus
+    const char *key = nullptr;  // 持久化与 MCP 使用的稳定标识
+    bool in_launcher = false;   // 出现在应用列表
+    bool openable = false;      // 允许设备控制打开
+    bool toggleable = false;    // 用户可在设置-应用开关中隐藏;设置本身常驻
+    bool default_enabled = true; // 无 NVS 记录时的初始状态
+    bool allow_toast = false;   // 前台按键反馈音
+    bool streaming = false;     // 息屏后仍需保持低延迟网络/音频
+    uint16_t heap_largest_kb = 0; // 进入前要求单块连续内存,0 表示轻量应用
+    uint16_t heap_free_kb = 0;  // 进入前要求总空闲内存
+#else
+    const char *key;
+    bool in_launcher;
+    bool openable;
+    bool toggleable;
+    bool default_enabled;
+    bool allow_toast;
+    bool streaming;
+    uint16_t heap_largest_kb;
+    uint16_t heap_free_kb;
 #endif
 } passport_app_t;
 

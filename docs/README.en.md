@@ -72,7 +72,7 @@ Use only the matching FoloToy AI Passport hardware revision with ESP32-C3 and 8 
 | First installation or a fresh start | `*-full.bin` | `0x0` |
 | Existing Passport OS with a verified identical partition layout | `*-app.bin` | `0x10000` |
 
-**Back up first.** A full image overwrites configuration in its written range. A complete reset also requires erasing flash. To preserve settings and images, verify the partition layout and use the application image without erasing the whole flash.
+**Back up first.** A full image overwrites configuration in its written range. A complete reset also requires erasing flash. To preserve settings and images, verify the partition layout and use the application image without erasing the whole flash. See the [Safe Flashing Guide](safe-flashing.en.md) for Windows, macOS, and Linux commands, backup steps, and recovery from a wrong offset.
 
 On first boot, connect your phone to the device's password-free `Passport-WiFi-xxxx` hotspot and open `http://192.168.4.1`. Follow the setup page to select Wi-Fi, city, and personal details. Xiaozhi and Muse need your own service configuration; AI Voice also needs its Windows companion.
 
@@ -93,7 +93,7 @@ Download the source, modify the apps or interface, build a firmware image, and t
 
 ### Build
 
-Install Git, ESP-IDF 5.5.3, and its toolchain. On Windows, you can build in WSL and flash through a Windows serial port.
+Install Git, ESP-IDF 5.5.3, and its toolchain. macOS, Linux, and Windows (WSL or Git Bash) can run the build script directly.
 
 ```bash
 git clone https://github.com/manchunx7-bit/passport-os.git
@@ -101,11 +101,13 @@ cd passport-os
 bash build.sh release
 ```
 
-The script loads ESP-IDF from `/opt/esp-idf` by default. For another installation path:
+The script looks for ESP-IDF in `IDF_DIR`, then `IDF_PATH`, then common install paths (`~/.espressif/v5.5.3/esp-idf`, `/opt/esp-idf`, `~/esp/esp-idf`), including macOS EIM installs. For another location:
 
 ```bash
 IDF_DIR="$HOME/esp/esp-idf" bash build.sh release
 ```
+
+On Windows without WSL, run ESP-IDF's `export.ps1` in PowerShell and call `idf.py -B build-public ... build` directly; the build script itself needs bash. See the [Safe Flashing Guide](safe-flashing.en.md) for flashing.
 
 ESP-IDF Component Manager downloads the declared dependencies. The build verifies distribution defaults, including public mode and empty proxy defaults.
 

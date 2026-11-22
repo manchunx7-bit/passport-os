@@ -1,4 +1,5 @@
 #include "list_service.h"
+#include "launcher/app_registry.h"
 #include <cJSON.h>
 #include <cstring>
 #include <memory>
@@ -31,11 +32,12 @@ bool batch(const cJSON *a,const char **texts,size_t *count){
 void header(cJSON *v,const List &r){cJSON_AddNumberToObject(v,"list_id",r.id);cJSON_AddStringToObject(v,"title",r.title);
     cJSON_AddNumberToObject(v,"revision",r.revision);cJSON_AddNumberToObject(v,"total",r.count);}
 }
-size_t tool_count(){return sizeof(schemas)/sizeof(schemas[0]);}
+size_t tool_count(){return app_registry_enabled(APP_ID_LISTS)?sizeof(schemas)/sizeof(schemas[0]):0;}
 const char *tool_schema(size_t i){return i<tool_count()?schemas[i]:nullptr;}
 std::string call(const char *name,const cJSON *args){
     const bool reading=!std::strcmp(name,"self.list.read"),creating=!std::strcmp(name,"self.list.create"),updating=!std::strcmp(name,"self.list.update");
     if(!reading&&!creating&&!updating)return {};
+    if(!app_registry_enabled(APP_ID_LISTS))return fail("文字清单已在设置中关闭，请先在设置里开启");
     if(!cJSON_IsObject(args))return fail("无效的清单参数");
     const auto *id=cJSON_GetObjectItemCaseSensitive(args,"list_id");
     if(id&&!number(id,1))return fail("清单编号无效");

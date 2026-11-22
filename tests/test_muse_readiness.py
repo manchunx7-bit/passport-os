@@ -76,7 +76,10 @@ with tempfile.TemporaryDirectory() as tmp:
     path = Path(tmp) / 'readiness.cpp'
     path.write_text(prelude + register + '}\nstatic bool tick(){bool error=false;do{\n' + gate + '\n}while(false);return error;}\n' + checks)
     cjson = Path(os.environ.get('IDF_PATH', '/opt/esp-idf')) / 'components/json/cJSON'
+    obj = Path(tmp) / 'cjson.o'
+    subprocess.run([os.environ.get('CC', 'cc'), '-std=c11', '-I', str(cjson),
+                    '-c', str(cjson / 'cJSON.c'), '-o', str(obj)], check=True)
     subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
-                    '-I', str(cjson), str(path), str(cjson / 'cJSON.c'), '-o', str(path.with_suffix(''))], check=True)
+                    '-I', str(cjson), str(path), str(obj), '-o', str(path.with_suffix(''))], check=True)
     subprocess.run([str(path.with_suffix(''))], check=True)
 print('Muse registration delay/rejection/timeout and optional identity gating: PASS')

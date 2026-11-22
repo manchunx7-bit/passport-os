@@ -15,8 +15,22 @@ size_t app_registry_get_count(void);
 // 获取指定索引的应用描述
 const passport_app_t *app_registry_get_by_index(size_t index);
 
-// 获取指定 ID 的应用描述
+// 获取指定 ID 的应用描述(包含已关闭的可选应用)
 const passport_app_t *app_registry_get_by_id(passport_app_id_t id);
+
+// 插件开关:可开关应用的状态由描述符默认值 + NVS 决定。
+bool app_registry_enabled(passport_app_id_t id);
+bool app_registry_set_enabled(passport_app_id_t id, bool enabled);
+// 恢复所有可开关应用的默认状态;设置页"恢复默认"调用。
+bool app_registry_reset_toggles(void);
+// 可在"设置-应用开关"中管理的应用(设置本身常驻,不在此列表)。
+size_t app_registry_toggle_count(void);
+const passport_app_t *app_registry_get_toggleable(size_t index);
+
+// 设备控制可打开的应用(已启用且 openable,不含隐藏配网页)。
+size_t app_registry_openable_count(void);
+const passport_app_t *app_registry_get_openable(size_t index);
+const char *app_registry_key(passport_app_id_t id);
 
 // 获取当前处于前台激活的应用 ID
 passport_app_id_t app_registry_get_active(void);

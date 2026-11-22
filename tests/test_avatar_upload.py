@@ -64,7 +64,7 @@ static void reset(std::vector<int> input={}){
  response.clear();committed=false;fail_store=false;authorized=true;
 }
 int main(){
- for(int size:{HOME_AVATAR_BYTES,HOME_AVATAR_V2_BYTES,HOME_AVATAR_LEGACY_BYTES}){
+ for(int size:{HOME_AVATAR_MAX_BYTES,HOME_AVATAR_BYTES,HOME_AVATAR_V2_BYTES,HOME_AVATAR_LEGACY_BYTES}){
   reset({1,7,128,511});httpd_req_t req{size};handler_avatar_post(&req);
   assert(status==200&&committed&&consumed==static_cast<size_t>(size));
  }
