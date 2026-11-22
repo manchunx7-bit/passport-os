@@ -12,7 +12,9 @@ with tempfile.TemporaryDirectory(prefix='passport-radio-') as tmp:
     exe = Path(tmp) / 'radio'
     subprocess.run(['cc', '-c', '-fsanitize=address,undefined', '-I'+str(CJSON),
                     str(CJSON / 'cJSON.c'), '-o', str(obj)], check=True)
+    # ESP_LOG mocks compile the log tag away; production builds still use it.
     subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
+                    '-Wno-unused-const-variable',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                     '-Itests/radio_mocks', '-Imain', '-I'+str(CJSON),
                     'tests/test_radio_catalog.cc', 'main/apps/radio/radio_catalog.cc',

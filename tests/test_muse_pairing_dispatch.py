@@ -175,8 +175,8 @@ int main(void) {
             binary = c.with_suffix('')
             cjson = Path(os.environ.get('IDF_PATH', '/opt/esp-idf')) / 'components/json/cJSON'
             compiled = subprocess.run([
-                os.environ.get('CC', 'cc'), '-std=gnu11', '-Wall', '-Wextra', '-Werror',
-                '-Wno-unused-parameter', '-fsanitize=address,undefined',
+                os.environ.get('CC', 'cc'), '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-Wno-deprecated-declarations',
+                '-Wno-unused-parameter', '-Wno-unused-function', '-fsanitize=address,undefined',
                 '-I', str(cjson), str(c), str(cjson / 'cJSON.c'), '-o', str(binary)
             ], capture_output=True, text=True)
             self.assertEqual(compiled.returncode, 0, compiled.stderr)

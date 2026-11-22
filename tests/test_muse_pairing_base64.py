@@ -1,5 +1,6 @@
 """Exercise production base64url decoding with real mbedTLS and shared storage."""
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 
@@ -7,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT / 'components/passport_muse/sdk/link_pairing.c').read_text()
 decode = source[source.index('static bool base64url_decode('):
                 source.index('static bool json_string(')]
-mbedtls = Path('/opt/esp-idf/components/mbedtls/mbedtls')
+mbedtls = Path(os.environ.get('IDF_PATH', '/opt/esp-idf')) / 'components/mbedtls/mbedtls'
 prelude = r'''
 #include <cassert>
 #include <cctype>
