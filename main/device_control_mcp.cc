@@ -133,7 +133,8 @@ std::string call(const char *name,const cJSON *args,uint64_t token) {
     const passport_app_id_t owner =
         !std::strcmp(name,"self.music.search") || !std::strcmp(name,"self.music.play")
             ? APP_ID_NETEASE
-            : !std::strcmp(name,"self.radio.play") ? APP_ID_RADIO : APP_ID_COUNT;
+            : !std::strcmp(name,"self.radio.play") ? APP_ID_RADIO
+            : !std::strcmp(name,"self.pomodoro.control") ? APP_ID_POMODORO : APP_ID_COUNT;
     if (owner != APP_ID_COUNT && !app_registry_enabled(owner))
         return fail("该应用已在设置中关闭，请先在设置里开启");
     Request request;

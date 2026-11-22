@@ -1,6 +1,7 @@
 #include "apps/aihot/aihot_mcp.h"
 
 #include "apps/aihot/aihot_news.h"
+#include "launcher/app_registry.h"
 
 #include <cJSON.h>
 #include <cstdio>
@@ -53,7 +54,7 @@ bool limit_arg(const cJSON *args, unsigned high, unsigned *out) {
 
 }  // namespace
 
-size_t tool_count() { return sizeof(schemas) / sizeof(schemas[0]); }
+size_t tool_count() { return app_registry_enabled(APP_ID_XIAOZHI) ? sizeof(schemas) / sizeof(schemas[0]) : 0; }
 const char *tool_schema(size_t index) { return index < tool_count() ? schemas[index] : nullptr; }
 
 std::string call(const char *name, const cJSON *args) {
@@ -62,6 +63,7 @@ std::string call(const char *name, const cJSON *args) {
     else if (!std::strcmp(name, "self.news.ai_news")) query.kind = Kind::News;
     else if (!std::strcmp(name, "self.news.ai_daily")) query.kind = Kind::Daily;
     else return {};
+    if (!app_registry_enabled(APP_ID_XIAOZHI)) return fail("小智已在设置中关闭，请先在设置里开启");
     if (!cJSON_IsObject(args)) return fail("参数无效");
     if (query.kind != Kind::Daily && !limit_arg(args, query.kind == Kind::Hot ? 10 : 8, &query.limit))
         return fail("条数必须是整数，热点 1 到 10 条，资讯 1 到 8 条");

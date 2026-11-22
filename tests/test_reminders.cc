@@ -7,8 +7,10 @@ namespace lists {size_t tool_count(){return 0;}const char *tool_schema(size_t){r
 namespace device_control {size_t tool_count(){return 0;} const char *tool_schema(size_t){return nullptr;} std::string call(const char*,const cJSON*,uint64_t){return {};} }
 static passport_app_id_t foreground=APP_ID_HOME;
 static uint32_t shown=0;
+static bool reminders_enabled=true;
 extern "C" passport_app_id_t app_registry_get_active(){return foreground;}
 extern "C" void app_registry_switch_to(passport_app_id_t id){foreground=id;}
+extern "C" bool app_registry_enabled(passport_app_id_t id){return id==APP_ID_REMINDERS?reminders_enabled:true;}
 extern "C" void app_registry_keep_awake(){}
 extern "C" int time_sync_tz_offset_sec(){return 28800;}
 namespace reminders {void show_alert(const Record*r,const char*){shown=r?r->id:0;}}
@@ -38,6 +40,15 @@ int main(){
         assert(!rpc_error);auto j=cJSON_Parse(json.c_str());assert(cJSON_GetArraySize(cJSON_GetObjectItem(j,"tools"))==1);cJSON_Delete(j);
     }
     mcp_result("tools/list","{\"cursor\":\"bad\"}",&rpc_error);assert(rpc_error);
+    reminders_enabled=false;
+    auto empty=mcp_result("tools/list","{}",&rpc_error);
+    assert(!rpc_error&&empty=="{\"tools\":[]}");
+    auto gated=mcp_result("tools/call",R"({"name":"self.reminder.list","arguments":{}})", &rpc_error);
+    assert(!rpc_error&&gated.find("已在设置中关闭")!=std::string::npos);
+    // A hidden plugin must not ring or change the foreground.
+    {Guard g;auto r=records[0];r.due=time(nullptr)-1;assert(save(0,r,next_id));}
+    poll();assert(!alarm_active()&&foreground==APP_ID_HOME);
+    reminders_enabled=true;
     auto result=mcp_result("tools/call",R"({"name":"self.reminder.create","arguments":{"title":"bad","due_local":"2026-02-30 10:00","delay_seconds":60}})",&rpc_error);
     assert(result.find("\"isError\":true")!=std::string::npos&&list(all,kCapacity)==2);
     // Due reminder wakes/switches the foreground, rings, then snoozes durably.

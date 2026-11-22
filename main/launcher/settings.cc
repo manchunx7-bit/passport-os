@@ -32,20 +32,19 @@ constexpr char kNvsNamespace[] = "system_prefs";
 constexpr uint8_t kVolumeStep = 10;
 constexpr uint8_t kBrightness[] = {20, 40, 60, 80, 100};
 constexpr uint16_t kTimeouts[] = {0, 15, 30, 60, 120, 300};
-// 固定设置项(音量..网络与时间),随后是注册表提供的可选应用开关,
-// 最后是恢复默认。行数随插件表变化,不再写死。
-constexpr size_t kFixedRows = 8;
+// 固定设置项,最后是恢复默认。应用开关是独立二级页,列表由插件注册表生成;
+// 设置自身常驻,不出现在可开关列表里。
+constexpr size_t kFixedRows = 9;
 constexpr size_t kVisibleRows = 7;
-constexpr size_t kMaxOptionalRows = 8;
-constexpr size_t kMaxRows = kFixedRows + kMaxOptionalRows + 1;
+constexpr size_t kMaxRows = kFixedRows + 1;
+constexpr size_t kMaxAppRows = 16;
+constexpr size_t kAppsRow = 5;
 
 uint8_t s_volume = 80;
 uint8_t s_brightness = 80;
 uint16_t s_timeout = 60;
 ui_theme_t s_theme = UI_THEME_CLASSIC;
 size_t s_selected = 0;
-size_t s_optional_rows = 0;
-passport_app_id_t s_toggle_ids[kMaxOptionalRows] = {};
 bool s_volume_editing = false;
 lv_obj_t *s_screen;
 lv_obj_t *s_rows[kMaxRows];
@@ -56,6 +55,18 @@ lv_timer_t *s_battery_timer;
 ui_pixel_battery_t s_battery{};
 lv_obj_t *s_wifi_bars[3] = {nullptr, nullptr, nullptr};
 bool s_reset_pending = false;
+
+bool s_apps_open = false;
+size_t s_apps_selected = 0;
+size_t s_app_count = 0;
+passport_app_id_t s_app_ids[kMaxAppRows] = {};
+lv_obj_t *s_apps_screen;
+lv_obj_t *s_apps_rows[kMaxAppRows];
+lv_obj_t *s_apps_names[kMaxAppRows];
+lv_obj_t *s_apps_values[kMaxAppRows];
+lv_obj_t *s_apps_hint, *s_apps_help;
+ui_pixel_battery_t s_apps_battery{};
+lv_obj_t *s_apps_wifi_bars[3] = {nullptr, nullptr, nullptr};
 std::atomic<int64_t> s_outdoor_until_us{0};
 std::atomic<uint8_t> s_outdoor_restore{80};
 
@@ -75,8 +86,37 @@ T next_value(const T (&values)[N], T current) {
     return values[0];
 }
 
-size_t row_count() { return kFixedRows + s_optional_rows + 1; }
-size_t reset_row() { return kFixedRows + s_optional_rows; }
+size_t row_count() { return kFixedRows + 1; }
+size_t reset_row() { return kFixedRows; }
+
+size_t first_visible(size_t selected, size_t count) {
+    if (count <= kVisibleRows || selected < kVisibleRows) return 0;
+    return std::min(selected - (kVisibleRows - 1), count - kVisibleRows);
+}
+
+void wifi_status(int *bars, uint32_t *color) {
+    *bars = 0;
+    *color = UI_TEXT_DIM;
+    if (!WifiManager::GetInstance().IsConnected()) return;
+    const int rssi = WifiManager::GetInstance().GetRssi();
+    *bars = rssi >= -60 ? 3 : (rssi >= -75 ? 2 : 1);
+    *color = UI_TEXT;
+}
+
+void dispose_apps_ui() {
+    lv_obj_t *screen = s_apps_screen;
+    s_apps_screen = nullptr;
+    s_apps_open = false;
+    s_apps_hint = s_apps_help = nullptr;
+    s_apps_battery = {};
+    for (size_t i = 0; i < kMaxAppRows; ++i) {
+        s_apps_rows[i] = nullptr;
+        s_apps_names[i] = nullptr;
+        s_apps_values[i] = nullptr;
+    }
+    s_apps_wifi_bars[0] = s_apps_wifi_bars[1] = s_apps_wifi_bars[2] = nullptr;
+    if (screen) lv_obj_delete(screen);
+}
 
 void save_all() {
     nvs_handle_t handle;
@@ -102,9 +142,7 @@ void apply_settings() {
 void refresh_ui() {
     if (!s_screen) return;
     const size_t count = row_count();
-    const size_t first = s_selected < kVisibleRows
-                             ? 0
-                             : std::min(s_selected - (kVisibleRows - 1), count - kVisibleRows);
+    const size_t first = first_visible(s_selected, count);
     for (size_t i = 0; i < count; ++i) {
         const bool selected = i == s_selected;
         lv_obj_set_flag(s_rows[i], LV_OBJ_FLAG_HIDDEN, s_reset_pending || i < first || i >= first + kVisibleRows);
@@ -129,21 +167,18 @@ void refresh_ui() {
     }
     lv_label_set_text(s_values[3], ui_theme_name(s_theme));
     lv_label_set_text(s_values[4], ui_sfx_enabled() ? "开" : "关");
-    lv_label_set_text(s_values[5], "打开");
+    lv_label_set_text(s_values[kAppsRow], "打开");
     lv_label_set_text(s_values[6], "打开");
-    lv_label_set_text(s_values[7], "查看");
-    for (size_t i = 0; i < s_optional_rows; ++i)
-        lv_label_set_text(s_values[kFixedRows + i],
-                          app_registry_enabled(s_toggle_ids[i]) ? "开" : "关");
+    lv_label_set_text(s_values[7], "打开");
+    lv_label_set_text(s_values[8], "查看");
     lv_label_set_text(s_values[reset_row()], s_reset_pending ? "再次确定" : "恢复");
     const char *hints[kMaxRows] = {
         "确定后上下调音量", "长按下键满亮两分钟",
         "确定切换熄屏时间", "确定切换主题",
-        "轻触反馈", "手机配网、资料与名片", "设备选网与已存网络", "查看网络、时间与电量"
+        "轻触反馈", "每个应用都可单独开关", "手机配网、资料与名片",
+        "设备选网与已存网络", "查看网络、时间与电量",
+        "仅恢复设备设置"
     };
-    for (size_t i = 0; i < s_optional_rows; ++i)
-        hints[kFixedRows + i] = "确定显示或隐藏此应用";
-    hints[reset_row()] = "仅恢复设备设置";
     lv_obj_set_flag(s_confirm, LV_OBJ_FLAG_HIDDEN, !s_reset_pending);
     lv_obj_set_flag(s_help, LV_OBJ_FLAG_HIDDEN, s_reset_pending);
     ui_pixel_label_set_text(s_help, s_volume_editing ? "上键加 · 下键减" : hints[s_selected]);
@@ -151,15 +186,32 @@ void refresh_ui() {
                                     : s_volume_editing ? "确定完成"
                                     : "上下选择 · 确定调整");
 
-    const bool wifi_ok = WifiManager::GetInstance().IsConnected();
     int bars = 0;
     uint32_t wifi_col = UI_TEXT_DIM;
-    if (wifi_ok) {
-        int rssi = WifiManager::GetInstance().GetRssi();
-        bars = rssi >= -60 ? 3 : (rssi >= -75 ? 2 : 1);
-        wifi_col = UI_TEXT;
-    }
+    wifi_status(&bars, &wifi_col);
     ui_pixel_wifi_bars_set(s_wifi_bars, bars, wifi_col);
+}
+
+void refresh_apps_ui() {
+    if (!s_apps_screen || !s_app_count) return;
+    const size_t first = first_visible(s_apps_selected, s_app_count);
+    for (size_t i = 0; i < s_app_count; ++i) {
+        const bool selected = i == s_apps_selected;
+        lv_obj_set_flag(s_apps_rows[i], LV_OBJ_FLAG_HIDDEN, i < first || i >= first + kVisibleRows);
+        if (i >= first) lv_obj_set_y(s_apps_rows[i], 38 + static_cast<int>(i - first) * 29);
+        ui_pixel_bg_color(s_apps_rows[i], selected ? UI_ACCENT : UI_BG);
+        ui_pixel_text_color(s_apps_names[i], selected ? UI_ON_ACCENT : UI_TEXT);
+        ui_pixel_text_color(s_apps_values[i], selected ? UI_ON_ACCENT : UI_TEXT_DIM);
+        lv_label_set_text(s_apps_values[i],
+                          app_registry_enabled(s_app_ids[i]) ? "开" : "关");
+    }
+    ui_pixel_label_set_text(s_apps_help, "确定开启或关闭此应用");
+    ui_pixel_label_set_text(s_apps_hint, "上下选择 · 确定切换");
+
+    int bars = 0;
+    uint32_t wifi_col = UI_TEXT_DIM;
+    wifi_status(&bars, &wifi_col);
+    ui_pixel_wifi_bars_set(s_apps_wifi_bars, bars, wifi_col);
 }
 
 void draw_neon_focus(lv_event_t *event) {
@@ -194,20 +246,11 @@ void create_ui() {
     ui_pixel_battery_set(&s_battery, bsp_battery_soc());
 
     static const char *labels[kFixedRows] = {
-        "音量", "屏幕亮度", "自动熄屏", "外观主题", "按键音效", "手机设置", "无线网络", "网络与时间"
+        "音量", "屏幕亮度", "自动熄屏", "外观主题", "按键音效", "应用开关",
+        "手机设置", "无线网络", "网络与时间"
     };
-    s_optional_rows = std::min(app_registry_optional_count(), kMaxOptionalRows);
-    for (size_t i = 0; i < s_optional_rows; ++i) {
-        const passport_app_t *app = app_registry_get_optional(i);
-        s_toggle_ids[i] = app ? app->id : APP_ID_COUNT;
-    }
     for (size_t i = 0; i < row_count(); ++i) {
-        const passport_app_t *toggle = i >= kFixedRows && i < reset_row()
-                                           ? app_registry_get_optional(i - kFixedRows)
-                                           : nullptr;
-        const char *label = i < kFixedRows ? labels[i]
-                            : i == reset_row() ? "恢复默认"
-                            : toggle && toggle->name ? toggle->name : "";
+        const char *label = i < kFixedRows ? labels[i] : "恢复默认";
         const int y = 38 + static_cast<int>(i) * 29;
         s_rows[i] = lv_obj_create(s_screen);
         lv_obj_set_size(s_rows[i], 216, 27);
@@ -238,11 +281,85 @@ void create_ui() {
     lv_obj_remove_flag(s_confirm, LV_OBJ_FLAG_SCROLLABLE); lv_obj_set_pos(s_confirm, 12, 42);lv_obj_set_size(s_confirm, 216, 220);
     auto *question = ui_pixel_label(s_confirm, "恢复默认设置？", &ui_font_20, UI_DANGER);
     lv_obj_set_pos(question, 0, 0);lv_obj_set_width(question, 216);
-    auto *consequence = ui_pixel_label(s_confirm, "音量、亮度设为 80%\n60 秒自动熄屏\n主题恢复经典绿\n按键音效开启\n可选应用恢复默认\nWi-Fi 与个人资料保留\n上下键取消", &buddy_font_16, UI_TEXT);
+    auto *consequence = ui_pixel_label(s_confirm, "音量、亮度设为 80%\n60 秒自动熄屏\n主题恢复经典绿\n按键音效开启\n应用开关恢复全开\nWi-Fi 与个人资料保留\n上下键取消", &buddy_font_16, UI_TEXT);
     lv_obj_set_pos(consequence, 0, 54);lv_obj_set_width(consequence, 216);
     lv_obj_set_style_text_line_space(consequence, 5, 0);
 
     refresh_ui();
+}
+
+void create_apps_ui() {
+    s_apps_screen = lv_obj_create(nullptr);
+    lv_obj_clear_flag(s_apps_screen, LV_OBJ_FLAG_SCROLLABLE);
+    ui_pixel_background(s_apps_screen);
+
+    lv_obj_t *top = ui_pixel_top_bar(s_apps_screen);
+    ui_pixel_wifi_bars_create(top, UI_STATUS_WIFI_X, 18, s_apps_wifi_bars);
+    lv_obj_t *title = ui_pixel_label(top, "应用开关", &buddy_font_16, UI_TEXT);
+    lv_obj_align(title, LV_ALIGN_LEFT_MID, 42, 0);
+    s_apps_battery = ui_pixel_battery_create(top, UI_STATUS_BATTERY_X, 6, UI_TEXT,
+                                             &lv_font_montserrat_14);
+    ui_pixel_battery_set(&s_apps_battery, bsp_battery_soc());
+
+    for (size_t i = 0; i < s_app_count; ++i) {
+        const passport_app_t *app = app_registry_get_by_id(s_app_ids[i]);
+        s_apps_rows[i] = lv_obj_create(s_apps_screen);
+        lv_obj_set_size(s_apps_rows[i], 216, 27);
+        lv_obj_set_pos(s_apps_rows[i], 12, 38 + static_cast<int>(i) * 29);
+        lv_obj_set_style_radius(s_apps_rows[i], 0, 0);
+        lv_obj_set_style_bg_color(s_apps_rows[i], lv_color_hex(UI_PAPER), 0);
+        lv_obj_set_style_bg_opa(s_apps_rows[i], LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(s_apps_rows[i], 0, 0);
+        lv_obj_set_style_border_color(s_apps_rows[i], lv_color_hex(UI_BORDER), 0);
+        lv_obj_set_style_pad_hor(s_apps_rows[i], 12, 0);
+        lv_obj_set_style_pad_ver(s_apps_rows[i], 0, 0);
+        lv_obj_clear_flag(s_apps_rows[i], LV_OBJ_FLAG_SCROLLABLE);
+        if (ui_theme_get() == UI_THEME_NEON)
+            lv_obj_add_event_cb(s_apps_rows[i], draw_neon_focus, LV_EVENT_DRAW_MAIN, nullptr);
+
+        s_apps_names[i] = ui_pixel_label(s_apps_rows[i],
+                                         app && app->name ? app->name : "",
+                                         &buddy_font_16, UI_TEXT);
+        lv_obj_align(s_apps_names[i], LV_ALIGN_LEFT_MID, 0, 0);
+
+        s_apps_values[i] = ui_pixel_label(s_apps_rows[i], "", &buddy_font_16, UI_SKY_DARK);
+        lv_obj_align(s_apps_values[i], LV_ALIGN_RIGHT_MID, 0, 0);
+    }
+
+    s_apps_help = ui_pixel_label(s_apps_screen, "", &buddy_font_16, UI_TEXT_DIM);
+    lv_obj_set_pos(s_apps_help, 12, 244);
+    lv_obj_set_size(s_apps_help, 216, 22);
+    lv_label_set_long_mode(s_apps_help, LV_LABEL_LONG_DOT);
+    s_apps_hint = ui_pixel_footer(s_apps_screen, "", "长按确定返回", &buddy_font_16);
+    refresh_apps_ui();
+}
+
+void open_apps_menu() {
+    bsp_lvgl_lock(-1);
+    s_apps_selected = 0;
+    s_app_count = std::min(app_registry_toggle_count(), kMaxAppRows);
+    for (size_t i = 0; i < s_app_count; ++i) {
+        const passport_app_t *app = app_registry_get_toggleable(i);
+        s_app_ids[i] = app ? app->id : APP_ID_COUNT;
+    }
+    create_apps_ui();
+    s_apps_open = true;
+    lv_scr_load(s_apps_screen);
+    bsp_lvgl_unlock();
+}
+
+void close_apps_menu() {
+    bsp_lvgl_lock(-1);
+    if (s_screen) lv_scr_load(s_screen);
+    dispose_apps_ui();
+    if (s_screen) refresh_ui();
+    bsp_lvgl_unlock();
+}
+
+bool settings_on_back() {
+    if (!s_apps_open) return false;
+    close_apps_menu();
+    return true;
 }
 
 void settings_init() {
@@ -253,11 +370,15 @@ void settings_start() {
     bsp_lvgl_lock(-1);
     s_reset_pending = false;
     s_volume_editing = false;
+    if (s_apps_screen) dispose_apps_ui();
     if (!s_screen) create_ui();
+    if (s_selected >= row_count()) s_selected = 0;
     refresh_ui();
     lv_scr_load(s_screen);
     if (!s_battery_timer) s_battery_timer = lv_timer_create([](lv_timer_t *) {
-        if (s_screen && app_registry_screen_is_on()) ui_pixel_battery_set(&s_battery, bsp_battery_soc());
+        if (!app_registry_screen_is_on()) return;
+        if (s_screen) ui_pixel_battery_set(&s_battery, bsp_battery_soc());
+        if (s_apps_screen) ui_pixel_battery_set(&s_apps_battery, bsp_battery_soc());
     }, 5000, nullptr);
     bsp_lvgl_unlock();
 }
@@ -271,6 +392,7 @@ void settings_stop() {
     }
     bsp_lvgl_lock(-1);
     if (s_battery_timer) {lv_timer_delete(s_battery_timer);s_battery_timer = nullptr;}
+    if (s_apps_screen) dispose_apps_ui();
     if (s_screen) {
         lv_obj_delete(s_screen);
         s_screen = nullptr;
@@ -292,6 +414,25 @@ void settings_on_key(uint8_t btn, app_btn_event_t event, uint16_t) {
     }
     if (network_diagnostics_active()) {
         if (btn == BSP_BTN_OK && event == BTN_EVT_CLICK) { network_diagnostics_close(); settings_start(); }
+        return;
+    }
+    if (s_apps_open) {
+        if (event != BTN_EVT_CLICK || !s_app_count) return;
+        if (btn == BSP_BTN_UP) {
+            s_apps_selected = (s_apps_selected + s_app_count - 1) % s_app_count;
+        } else if (btn == BSP_BTN_DOWN) {
+            s_apps_selected = (s_apps_selected + 1) % s_app_count;
+        } else if (btn == BSP_BTN_OK) {
+            const passport_app_id_t id = s_app_ids[s_apps_selected];
+            if (!app_registry_set_enabled(id, !app_registry_enabled(id)))
+                ESP_LOGW(kTag, "Failed to toggle app %d", (int)id);
+        } else {
+            return;
+        }
+        bsp_lvgl_lock(-1);
+        refresh_apps_ui();
+        ui_pixel_focus_feedback(s_apps_rows[s_apps_selected]);
+        bsp_lvgl_unlock();
         return;
     }
     if (s_selected == 1 && btn == BSP_BTN_DOWN && event == BTN_EVT_LONG) {
@@ -330,23 +471,18 @@ void settings_on_key(uint8_t btn, app_btn_event_t event, uint16_t) {
             s_theme = static_cast<ui_theme_t>((static_cast<unsigned>(s_theme) + 1) % UI_THEME_COUNT);
             rebuild = true;
         } else if (s_selected == 4) ui_sfx_set_enabled(!ui_sfx_enabled());
-        else if (s_selected == 5) {
-            app_registry_switch_to(APP_ID_WIFI);
+        else if (s_selected == kAppsRow) {
+            open_apps_menu();
             return;
         } else if (s_selected == 6) {
+            app_registry_switch_to(APP_ID_WIFI);
+            return;
+        } else if (s_selected == 7) {
             settings_stop();
             if (!wifi_picker_open()) settings_start();
             return;
-        } else if (s_selected == 7) {
+        } else if (s_selected == 8) {
             settings_stop(); network_diagnostics_open(); return;
-        } else if (s_selected < reset_row()) {
-            const passport_app_id_t id = s_toggle_ids[s_selected - kFixedRows];
-            if (!app_registry_set_enabled(id, !app_registry_enabled(id)))
-                ESP_LOGW(kTag, "Failed to update optional app %d", (int)id);
-            bsp_lvgl_lock(-1);
-            refresh_ui();
-            bsp_lvgl_unlock();
-            return;
         } else if (!s_reset_pending) {
             s_reset_pending = true;
             bsp_lvgl_lock(-1);
@@ -360,7 +496,7 @@ void settings_on_key(uint8_t btn, app_btn_event_t event, uint16_t) {
             s_timeout = 60;
             s_theme = UI_THEME_CLASSIC;
             ui_sfx_set_enabled(true);
-            if (!app_registry_reset_optional()) ESP_LOGW(kTag, "Failed to reset optional apps");
+            if (!app_registry_reset_toggles()) ESP_LOGW(kTag, "Failed to reset app toggles");
             rebuild = true;
         }
         apply_settings();
@@ -471,5 +607,6 @@ const passport_app_t g_settings_app = {
     .stop = settings_stop,
     .on_key = settings_on_key,
     .prepare_stop = []() { return !wifi_picker_busy(); },
+    .on_back = settings_on_back,
     .key = "settings", .in_launcher = true, .openable = true, .allow_toast = true,
 };

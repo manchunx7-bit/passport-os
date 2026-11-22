@@ -68,8 +68,8 @@ typedef struct passport_app_s {
     const char *key = nullptr;  // 持久化与 MCP 使用的稳定标识
     bool in_launcher = false;   // 出现在应用列表
     bool openable = false;      // 允许设备控制打开
-    bool optional = false;      // 用户可在设置页开关
-    bool default_enabled = false; // 无 NVS 记录时的初始状态
+    bool toggleable = false;    // 用户可在设置-应用开关中隐藏;设置本身常驻
+    bool default_enabled = true; // 无 NVS 记录时的初始状态
     bool allow_toast = false;   // 前台按键反馈音
     bool streaming = false;     // 息屏后仍需保持低延迟网络/音频
     uint16_t heap_largest_kb = 0; // 进入前要求单块连续内存,0 表示轻量应用
@@ -78,7 +78,7 @@ typedef struct passport_app_s {
     const char *key;
     bool in_launcher;
     bool openable;
-    bool optional;
+    bool toggleable;
     bool default_enabled;
     bool allow_toast;
     bool streaming;

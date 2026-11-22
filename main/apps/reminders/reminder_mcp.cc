@@ -3,6 +3,7 @@
 #include "apps/lists/list_service.h"
 #include "apps/aihot/aihot_mcp.h"
 #include "apps/voice/time_sync.h"
+#include "launcher/app_registry.h"
 #include <cJSON.h>
 #include <ctime>
 #include <cstring>
@@ -78,8 +79,9 @@ std::string mcp_result(const char *method,const char *json,bool *rpc_error,uint6
     if(!std::strcmp(method,"initialize")) return R"({"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"passport-reminders","version":"1"}})";
     Json params(cJSON_Parse(json),cJSON_Delete);
     if(!std::strcmp(method,"tools/list")) {
-        const unsigned reminder_tools=sizeof(tools)/sizeof(tools[0]);
+        const unsigned reminder_tools=app_registry_enabled(APP_ID_REMINDERS)?sizeof(tools)/sizeof(tools[0]):0;
         const unsigned total_tools=reminder_tools+device_control::tool_count()+lists::tool_count()+aihot::tool_count();
+        if(!total_tools)return R"({"tools":[]})";
         unsigned page=0;const auto *cursor=cJSON_GetObjectItem(params.get(),"cursor");
         bool valid=!cursor||cJSON_IsString(cursor);
         if(cJSON_IsString(cursor)&&cursor->valuestring[0]) {
@@ -100,6 +102,8 @@ std::string mcp_result(const char *method,const char *json,bool *rpc_error,uint6
     const auto *args=cJSON_GetObjectItem(params.get(),"arguments");
     if(!cJSON_IsString(name)||!cJSON_IsObject(args))return fail("Invalid tool arguments");
     const char *tool=name->valuestring;
+    if(!std::strncmp(tool,"self.reminder.",14)&&!app_registry_enabled(APP_ID_REMINDERS))
+        return fail("备忘提醒已在设置中关闭，请先在设置里开启");
     const std::string device_reply=device_control::call(tool,args,token);
     if (!device_reply.empty()) return device_reply;
     const std::string list_reply=lists::call(tool,args);if(!list_reply.empty())return list_reply;

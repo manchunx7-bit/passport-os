@@ -95,4 +95,4 @@ void key(uint8_t btn,app_btn_event_t event,uint16_t){
 extern const passport_app_t g_lists_app;
 const passport_app_t g_lists_app={.id=APP_ID_LISTS,.name="文字清单",.en_name="LISTS",.desc="用小智整理事项\n随时查看完成",.tag="本地文字",.theme_color=0x8CF5A6,
     .init=nullptr,.start=lists::start,.stop=lists::stop,.on_key=lists::key,.prepare_stop=nullptr,.on_back=lists::back,
-    .key="lists",.in_launcher=true,.openable=true,.allow_toast=true};
+    .key="lists",.in_launcher=true,.openable=true,.toggleable=true,.allow_toast=true};

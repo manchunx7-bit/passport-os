@@ -85,8 +85,8 @@ const passport_app_t *find_app(passport_app_id_t id) {
     return nullptr;
 }
 
-bool default_enabled(const passport_app_t *app) {
-    return app && (!app->optional || app->default_enabled);
+bool initial_enabled(const passport_app_t *app) {
+    return app && (!app->toggleable || app->default_enabled);
 }
 
 void load_enabled() {
@@ -94,8 +94,8 @@ void load_enabled() {
     const bool stored = nvs_open(kFlagsNamespace, NVS_READONLY, &handle) == ESP_OK;
     for (const passport_app_t *app : s_apps) {
         if (!app || app->id >= APP_ID_COUNT) continue;
-        bool enabled = default_enabled(app);
-        if (app->optional && app->key && app->key[0] && stored) {
+        bool enabled = initial_enabled(app);
+        if (app->toggleable && app->key && app->key[0] && stored) {
             uint8_t value = 0;
             if (nvs_get_u8(handle, app->key, &value) == ESP_OK) enabled = value != 0;
         }
@@ -392,7 +392,7 @@ bool app_registry_enabled(passport_app_id_t id) {
 
 bool app_registry_set_enabled(passport_app_id_t id, bool enabled) {
     const passport_app_t *app = find_app(id);
-    if (!app || !app->optional || !app->key || !app->key[0]) return false;
+    if (!app || !app->toggleable || !app->key || !app->key[0]) return false;
     if (!enabled && s_active_id.load() == id) return false;
     if (!store_enabled(app, enabled)) return false;
     s_enabled[id] = enabled;
@@ -400,10 +400,10 @@ bool app_registry_set_enabled(passport_app_id_t id, bool enabled) {
     return true;
 }
 
-bool app_registry_reset_optional(void) {
+bool app_registry_reset_toggles(void) {
     bool saved = true;
     for (const passport_app_t *app : s_apps) {
-        if (!app || !app->optional || !app->key || !app->key[0]) continue;
+        if (!app || !app->toggleable || !app->key || !app->key[0]) continue;
         if (store_enabled(app, app->default_enabled)) {
             s_enabled[app->id] = app->default_enabled;
         } else {
@@ -413,17 +413,17 @@ bool app_registry_reset_optional(void) {
     return saved;
 }
 
-size_t app_registry_optional_count(void) {
+size_t app_registry_toggle_count(void) {
     size_t count = 0;
     for (const passport_app_t *app : s_apps) {
-        if (app && app->optional && app->key && app->key[0]) ++count;
+        if (app && app->toggleable && app->key && app->key[0]) ++count;
     }
     return count;
 }
 
-const passport_app_t *app_registry_get_optional(size_t index) {
+const passport_app_t *app_registry_get_toggleable(size_t index) {
     for (const passport_app_t *app : s_apps) {
-        if (!app || !app->optional || !app->key || !app->key[0]) continue;
+        if (!app || !app->toggleable || !app->key || !app->key[0]) continue;
         if (index == 0) return app;
         --index;
     }

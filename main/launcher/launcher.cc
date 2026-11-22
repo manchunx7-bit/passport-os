@@ -361,12 +361,32 @@ constexpr IconGlyph kIconGlyphs[] = {
     }},
 };
 
+// New plugins without bespoke art still get a readable card instead of a blank icon.
+constexpr IconGlyph kFallbackGlyph = {APP_ID_COUNT, {
+    ".................",
+    ".................",
+    "....#########....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#.......#....",
+    "....#########....",
+    ".................",
+    ".................",
+    ".................",
+}};
+
 // The icon is drawn into its existing object; no per-part heap allocations.
 void draw_app_icon_event(lv_event_t *event) {
-    const IconGlyph *glyph = nullptr;
+    const IconGlyph *glyph = &kFallbackGlyph;
     for (const IconGlyph &g : kIconGlyphs)
         if (g.id == s_icon_id) glyph = &g;
-    if (!glyph) return;
     pixel_scene::Ink ink(event);
     for (int y = 0; y < kGlyphCells; ++y) {
         const char *row = glyph->rows[y];

@@ -34,7 +34,7 @@ static const char *key_for(passport_app_id_t id){
 static passport_app_t app(passport_app_id_t id){
  passport_app_t a{};a.id=id;a.name="test";a.start=start;a.stop=stop;a.on_key=key;a.prepare_stop=prepare;
  a.key=key_for(id);a.in_launcher=id!=APP_ID_HOME&&id!=APP_ID_WIFI;a.openable=id!=APP_ID_WIFI;
- a.optional=id==APP_ID_VOICE||id==APP_ID_MUSE;a.default_enabled=false;
+ a.toggleable=id!=APP_ID_HOME&&id!=APP_ID_WIFI&&id!=APP_ID_SETTINGS;a.default_enabled=true;
  a.allow_toast=id==APP_ID_HOME||id==APP_ID_SETTINGS||id==APP_ID_STOPWATCH||id==APP_ID_POMODORO||
   id==APP_ID_TETRIS||id==APP_ID_REMINDERS||id==APP_ID_LISTS;
  a.streaming=id==APP_ID_RADIO||id==APP_ID_NETEASE||id==APP_ID_VOICE||id==APP_ID_XIAOZHI||id==APP_ID_MUSE;
@@ -77,14 +77,17 @@ int main(){
  }
  s_active_id.store(APP_ID_LAUNCHER);s_screen_on.store(true);
  app_registry_init();
- // Optional plugins default off, persist through NVS, and non-optional apps
- // cannot be hidden. The device-control list follows the same enabled state.
- assert(!app_registry_enabled(APP_ID_VOICE)&&!app_registry_enabled(APP_ID_MUSE));
- assert(app_registry_get_count()==11&&app_registry_optional_count()==2);
- assert(!app_registry_set_enabled(APP_ID_RADIO,false));
- assert(app_registry_set_enabled(APP_ID_VOICE,true)&&app_registry_set_enabled(APP_ID_MUSE,true));
- assert(app_registry_get_count()==13);
+ // Every launcher app except Settings can be toggled, all default on, and the
+ // choice persists through NVS. System screens and Settings stay permanent.
+ assert(app_registry_enabled(APP_ID_VOICE)&&app_registry_enabled(APP_ID_MUSE));
+ assert(app_registry_get_count()==13&&app_registry_toggle_count()==12);
+ assert(!app_registry_set_enabled(APP_ID_HOME,false));
+ assert(!app_registry_set_enabled(APP_ID_SETTINGS,false));
+ assert(app_registry_set_enabled(APP_ID_RADIO,false));
+ assert(!app_registry_enabled(APP_ID_RADIO)&&app_registry_get_count()==12);
  load_enabled();
+ assert(!app_registry_enabled(APP_ID_RADIO));
+ assert(app_registry_set_enabled(APP_ID_RADIO,true));
  assert(app_registry_enabled(APP_ID_VOICE)&&app_registry_enabled(APP_ID_MUSE));
  assert(app_registry_openable_count()==14);
  assert(!std::strcmp(app_registry_key(APP_ID_NETEASE),"music"));
@@ -342,14 +345,14 @@ int main(){
  assert(app_registry_take_clean_launch()==APP_ID_MUSE);
  app_registry_switch_to(APP_ID_MUSE);assert(app_registry_get_active()==APP_ID_MUSE&&mock_restarts==3);
  mock_largest=40000;mock_free=100000;
- // A foreground plugin cannot be hidden, and reset restores defaults.
+ // A foreground plugin cannot be hidden, and reset restores the default (on).
  assert(!app_registry_set_enabled(APP_ID_MUSE,false));
  app_registry_switch_to(APP_ID_HOME);
- assert(app_registry_reset_optional());
- assert(!app_registry_enabled(APP_ID_VOICE)&&!app_registry_enabled(APP_ID_MUSE));
- assert(app_registry_get_count()==11&&app_registry_openable_count()==12);
- assert(app_registry_set_enabled(APP_ID_VOICE,true));
- assert(app_registry_get_count()==12&&app_registry_openable_count()==13);
+ assert(app_registry_set_enabled(APP_ID_VOICE,false));
+ assert(!app_registry_enabled(APP_ID_VOICE)&&app_registry_get_count()==12);
+ assert(app_registry_reset_toggles());
+ assert(app_registry_enabled(APP_ID_VOICE)&&app_registry_enabled(APP_ID_MUSE));
+ assert(app_registry_get_count()==13&&app_registry_openable_count()==14);
  mock_active=nullptr;for(auto *p:mock_screens)delete p;mock_screens.clear();
  delete s_switch_mutex;delete s_display_awake_lock;
  puts("Registry: pending worker gate, feedback ownership, single click, wake gesture, latest target and screen lifecycle, clean launch PASS");

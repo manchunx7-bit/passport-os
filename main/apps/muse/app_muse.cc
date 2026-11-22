@@ -279,7 +279,7 @@ extern const passport_app_t g_muse_app = {
     .id = APP_ID_MUSE, .name = "Muse", .en_name = "MUSE", .desc = "语音交给你的 Muse",
     .tag = "需代理", .theme_color = 0x8DA7B0,
     .init = init, .start = start, .stop = stop, .on_key = key,
-    .key = "muse", .in_launcher = true, .openable = true,
-    .optional = true, .default_enabled = false, .streaming = true,
+    .key = "muse", .in_launcher = true, .openable = true, .toggleable = true,
+    .default_enabled = true, .streaming = true,
     .heap_largest_kb = 20, .heap_free_kb = 44,
 };

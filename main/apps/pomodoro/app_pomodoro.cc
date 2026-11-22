@@ -274,5 +274,5 @@ extern const passport_app_t g_pomodoro_app = {
     .start = start,
     .stop = stop,
     .on_key = on_key,
-    .key = "pomodoro", .in_launcher = true, .openable = true, .allow_toast = true,
+    .key = "pomodoro", .in_launcher = true, .openable = true, .toggleable = true, .allow_toast = true,
 };

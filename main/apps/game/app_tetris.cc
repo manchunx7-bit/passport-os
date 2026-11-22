@@ -557,6 +557,6 @@ const passport_app_t g_tetris_app = {
     .start = tetris_start,
     .stop = tetris_stop,
     .on_key = tetris_on_key,
-    .key = "tetris", .in_launcher = true, .openable = true, .allow_toast = true,
+    .key = "tetris", .in_launcher = true, .openable = true, .toggleable = true, .allow_toast = true,
 };
 }
