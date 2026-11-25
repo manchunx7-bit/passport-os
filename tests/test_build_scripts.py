@@ -90,9 +90,13 @@ with tempfile.TemporaryDirectory(prefix='passport-build-') as tmp:
     assert result.returncode == 0, result.stdout + result.stderr
     assert eim_log.exists() and not other_log.exists()
 
-    result = run(script, HOME=str(tmp / 'empty-home'))
+    result = run(script, HOME=str(tmp / 'empty-home'), IDF_DIR=str(tmp / 'missing-idf'))
     assert result.returncode == 1
     assert 'IDF_DIR' in result.stdout and 'IDF_PATH' in result.stdout
+    if not Path('/opt/esp-idf/export.sh').exists():
+        result = run(script, HOME=str(tmp / 'empty-home'))
+        assert result.returncode == 1
+        assert 'IDF_DIR' in result.stdout and 'IDF_PATH' in result.stdout
 
 zh = (ROOT / 'docs/safe-flashing.zh_CN.md').read_text(encoding='utf-8')
 en = (ROOT / 'docs/safe-flashing.en.md').read_text(encoding='utf-8')
