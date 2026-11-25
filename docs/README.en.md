@@ -4,13 +4,13 @@
 
 **A small device worth keeping in your daily routine.**
 
-Community firmware for the FoloToy AI Passport, based on ESP32-C3 with 8 MB Flash. It brings thirteen apps together with shared settings, Wi-Fi setup, themes, audio, battery reporting, and power management.
+Community firmware for the FoloToy AI Passport, based on ESP32-C3 with 8 MB Flash. It brings fifteen apps together with shared settings, Wi-Fi setup, themes, audio, battery reporting, and power management.
 
 **Ask Xiaozhi to adjust the volume, play music or radio, and set reminders on the device.**
 
 ## Why this project exists
 
-Thank you to everyone who has enjoyed the project and shared feedback. I started Passport OS to make a small device I would use regularly, then selected thirteen functions and apps through repeated experiments.
+Thank you to everyone who has enjoyed the project and shared feedback. I started Passport OS to make a small device I would use regularly, then selected fifteen functions and apps through repeated experiments.
 
 One part I especially enjoy is letting Xiaozhi connect these functions. While chatting, you can ask to hear music, save a task, or start a focus session, and Xiaozhi calls the device's functions to carry out the request.
 
@@ -30,16 +30,18 @@ People have suggested many personal improvements. Because everyone uses the hard
 | “Create a packing list: keys, phone, umbrella” or “Mark umbrella as done” | Save a checklist, then read and update its items and completion state |
 | “Open Stopwatch” or “Go to Home” | Open the requested app or screen |
 
-You can also ask for today's AI news. Robot expressions and an audio waveform follow listening and speech, longer text expands into a reading area, and all four themes are supported.
+You can also ask for today's AI news, request podcasts or audiobooks (with sleep timers), switch themes or screen timeouts, and update your home signature. Robot expressions and an audio waveform follow listening and speech, longer text expands into a reading area, and all five themes (including Obsidian Studio) are supported.
 
 Voice tools require a network connection and Xiaozhi configuration. NetEase playback also depends on your account and available tracks; radio depends on the online directory. Opening another app or starting media playback ends the current Xiaozhi conversation. Double-press OK again for further voice control. The device must remain powered on for reminders to trigger.
 
-## Thirteen apps
+## Fifteen apps
 
 | App | What it does | Requirements |
 | --- | --- | --- |
-| Home | Clock, profile, portraits, cards, weather, and air quality | Network for weather and air quality |
+| Home | Clock, profile, true-color/themed portraits, cards, weather, and air quality | Network for weather and air quality |
 | Radio | City and station selection, playback, and sleep timer | Wi-Fi and available online stations |
+| Podcast | Trending podcasts, daily picks, channel browsing, resume playback, and sleep timer | Wi-Fi and available online audio |
+| Audiobook | Four audiobook channels, 5-book shelf resume persistence, and sleep timer | Wi-Fi and available online audio |
 | AI Voice | Hardware microphone and configurable desktop hotkeys | Windows companion program |
 | Xiaozhi AI | Voice conversations, volume and brightness control, app opening, music and radio requests, timers, reminders, and lists | Network and Xiaozhi configuration; media needs its corresponding service |
 | NetEase Music | Search songs, play playlists and daily recommendations | Wi-Fi, your own NetEase account, and available APIs |
