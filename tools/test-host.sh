@@ -74,6 +74,9 @@ python3 tests/test_esp_tls_connect.py
 "$test_dir/captive-setup"
 node tests/test_profile_page.js
 node tests/test_portrait_pixels.js
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
+    -Imain tests/test_portrait_styles.c main/ui/ui_portrait.c -o "$test_dir/portrait-styles"
+"$test_dir/portrait-styles"
 python3 tests/test_card_gallery.py
 python3 tests/test_avatar_upload.py
 "${CC:-cc}" -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -Wno-unused-variable \

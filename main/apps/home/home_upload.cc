@@ -131,6 +131,17 @@ static esp_err_t handler_profile_get(httpd_req_t *req) {
     cJSON *subject = cJSON_AddArrayToObject(root, "portrait_subject_palette");
     for (uint8_t level = 0; level < 4; ++level)
         cJSON_AddItemToArray(subject, cJSON_CreateNumber(ui_theme_portrait_subject_color(level)));
+    cJSON *styles = cJSON_AddArrayToObject(root, "portrait_styles");
+    for (size_t index = 0; index < ui_portrait_style_count(); ++index) {
+        const ui_portrait_style_t style = ui_portrait_style_get(index);
+        cJSON *entry = cJSON_CreateObject();
+        cJSON_AddNumberToObject(entry, "id", style.id);
+        cJSON_AddStringToObject(entry, "label", style.label);
+        cJSON *colors = cJSON_AddArrayToObject(entry, "palette");
+        for (uint8_t level = 0; level < 4; ++level)
+            cJSON_AddItemToArray(colors, cJSON_CreateNumber(style.palette[level]));
+        cJSON_AddItemToArray(styles, entry);
+    }
     cJSON_AddBoolToObject(root, "share_image", home_profile_has_share_image());
     char *json = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -237,16 +248,17 @@ static esp_err_t handler_muse_post(httpd_req_t *req) {
 
 static esp_err_t handler_avatar_get(httpd_req_t *req) {
     if (!token_ok(req)) return send_json(req, 401, "{\"error\":\"unauthorized\"}");
-    auto *data = static_cast<uint8_t *>(std::malloc(HOME_AVATAR_BYTES));
+    auto *data = static_cast<uint8_t *>(std::calloc(1, HOME_AVATAR_MAX_BYTES));
     if (!data) return send_json(req, 400, "{\"error\":\"oom\"}");
-    const esp_err_t loaded = home_profile_read_avatar(data, HOME_AVATAR_BYTES);
+    const esp_err_t loaded = home_profile_read_avatar(data, HOME_AVATAR_MAX_BYTES);
     if (loaded != ESP_OK) {
         std::free(data);
         return send_json(req, 400, "{\"error\":\"avatar\"}");
     }
+    const size_t payload_bytes = home_portrait_is_color(data) ? HOME_AVATAR_COLOR_BYTES : HOME_AVATAR_BYTES;
     httpd_resp_set_type(req, "application/octet-stream");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store, max-age=0");
-    const esp_err_t sent = httpd_resp_send(req, reinterpret_cast<const char *>(data), HOME_AVATAR_BYTES);
+    const esp_err_t sent = httpd_resp_send(req, reinterpret_cast<const char *>(data), payload_bytes);
     std::free(data);
     return sent;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -43,8 +44,21 @@ uint32_t ui_theme_color(ui_color_role_t role);
 uint32_t ui_theme_color_on_dark(ui_color_role_t role);
 uint32_t ui_theme_portrait_color(uint8_t level);
 uint32_t ui_theme_portrait_subject_color(uint8_t level);
+uint32_t ui_theme_portrait_theme_color(ui_theme_t theme, uint8_t level);
 const char *ui_theme_name(ui_theme_t theme);
 uint32_t ui_studio_meter_color(unsigned index, unsigned count, uint8_t value);
+
+// 头像风格取值：0 保留照片本色，其余为主题枚举编号 + 1；id 直接写入 PT36 头部。
+// 风格列表与主题枚举共用一张表，设置页和手机页面都从这里取选项，不另维护副本。
+typedef struct {
+    uint8_t id;
+    const char *label;
+    uint32_t palette[4];  // id 0 不使用，其余为对应主题的色阶
+} ui_portrait_style_t;
+
+size_t ui_portrait_style_count(void);
+bool ui_portrait_style_valid(uint8_t id);
+ui_portrait_style_t ui_portrait_style_get(size_t index);
 
 #ifdef __cplusplus
 }

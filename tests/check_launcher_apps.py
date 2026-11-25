@@ -35,7 +35,8 @@ assert len(set(icons.values()))==len(icons),'duplicate launcher icons in kIconGl
 palette_h=(root/'main/ui/ui_palette.h').read_text(encoding='utf-8')
 assert 'UI_THEME_STUDIO' in palette_h,'UI_THEME_STUDIO missing from ui_palette.h'
 pixel_c=(root/'main/ui/ui_pixel.c').read_text(encoding='utf-8')
-theme_names=re.findall(r'case UI_THEME_(\w+):\s*return\s*"([^"]+)"',pixel_c)
+portrait_c=(root/'main/ui/ui_portrait.c').read_text(encoding='utf-8')
+theme_names=re.findall(r'case UI_THEME_(\w+):\s*return\s*"([^"]+)"',portrait_c)
 assert any(k=='STUDIO' and v=='曜石工坊' for k,v in theme_names),'Studio theme name missing'
 buddy_glyphs={chr(int(c,16)) for c in re.findall(r'/\* U\+([0-9A-Fa-f]{4,6})',(root/'main/fonts/buddy_font_16.c').read_text(encoding='utf-8'))}
 for k,v in theme_names:

@@ -78,24 +78,7 @@ uint32_t ui_theme_portrait_color(uint8_t level)
 }
 uint32_t ui_theme_portrait_subject_color(uint8_t level)
 {
-    static const uint32_t colors[UI_THEME_COUNT][4] = {
-        {0x254D36, 0x4B8060, 0x80B795, 0xA8EDBB},
-        {0x484D43, 0x797D69, 0xB6B7A0, 0xEEE7D6},
-        {0x374543, 0x637771, 0xADBFB1, 0xF1EEE6},
-        {0x343C55, 0x657593, 0xB3C5D8, 0xF4F4F6},
-        {0x343740, 0x646978, 0xA8AEB8, 0xF5F3EE},
-    };
-    return colors[s_ui_theme][level > 3 ? 3 : level];
-}
-const char *ui_theme_name(ui_theme_t theme)
-{
-    switch (theme) {
-        case UI_THEME_TRAVEL: return "旅行仪器";
-        case UI_THEME_PLAYFUL: return "像素白";
-        case UI_THEME_NEON: return "霓虹黑";
-        case UI_THEME_STUDIO: return "曜石工坊";
-        default: return "经典绿";
-    }
+    return ui_theme_portrait_theme_color(s_ui_theme, level);
 }
 
 uint32_t ui_studio_meter_color(unsigned index, unsigned count, uint8_t value)

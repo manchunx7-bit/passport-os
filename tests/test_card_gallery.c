@@ -43,7 +43,7 @@ static void exact_file(const char *path) {
     FILE *f=fopen(path,"rb");assert(f);unsigned char data[HOME_SHARE_MAX_BYTES];size_t n=fread(data,1,sizeof(data),f);assert(feof(f));fclose(f);assert(n==jpeg_size&&!memcmp(data,jpeg,n));
 }
 static void portraits(void) {
-    uint8_t legacy[HOME_AVATAR_LEGACY_BYTES], data[HOME_AVATAR_BYTES], readback[HOME_AVATAR_BYTES];
+    uint8_t legacy[HOME_AVATAR_LEGACY_BYTES], tones[HOME_AVATAR_BYTES], color[HOME_AVATAR_COLOR_BYTES], readback[HOME_AVATAR_MAX_BYTES];
     memset(legacy,0xa5,sizeof(legacy));
     FILE *f=fopen(SPIFFS_BASE "/portrait.bin","wb");assert(f);
     assert(fwrite(legacy,1,sizeof(legacy),f)==sizeof(legacy));fclose(f);
@@ -51,23 +51,23 @@ static void portraits(void) {
     for(size_t i=0;i<HOME_PORTRAIT_W*HOME_PORTRAIT_H;i++)
         assert(home_portrait_index(readback,i)==((legacy[i/8]&(128>>(i%8)))?3:0));
     assert(home_profile_read_avatar(readback,sizeof(readback)-1)==ESP_ERR_INVALID_ARG);
-    for(size_t i=0;i<sizeof(data);i++)data[i]=(uint8_t)i;
-    home_portrait_init_header(data,3);
-    assert(home_profile_write_avatar_chunk(data,97,true,false,sizeof(data))==ESP_OK);
+    for(size_t i=0;i<sizeof(tones);i++)tones[i]=(uint8_t)i;
+    home_portrait_init_header(tones,3);
+    assert(home_profile_write_avatar_chunk(tones,97,true,false,sizeof(tones))==ESP_OK);
     home_profile_abort_avatar_upload();assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK);
     assert(readback[HOME_PORTRAIT_HEADER_BYTES]==0xcc);
     fail_commit=true;
-    assert(home_profile_write_avatar_chunk(data,sizeof(data),true,true,sizeof(data))==ESP_FAIL);
+    assert(home_profile_write_avatar_chunk(tones,sizeof(tones),true,true,sizeof(tones))==ESP_FAIL);
     assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&readback[HOME_PORTRAIT_HEADER_BYTES]==0xcc);fail_commit=false;
-    for(size_t i=0;i<sizeof(data);i+=97){size_t n=sizeof(data)-i;if(n>97)n=97;
-        assert(home_profile_write_avatar_chunk(data+i,n,i==0,i+n==sizeof(data),sizeof(data))==ESP_OK);}
-    assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&!memcmp(data,readback,sizeof(data)));
+    for(size_t i=0;i<sizeof(tones);i+=97){size_t n=sizeof(tones)-i;if(n>97)n=97;
+        assert(home_profile_write_avatar_chunk(tones+i,n,i==0,i+n==sizeof(tones),sizeof(tones))==ESP_OK);}
+    assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&!memcmp(tones,readback,sizeof(tones)));
     home_profile_init();assert(home_profile_has_avatar());
-    assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&!memcmp(data,readback,sizeof(data)));
-    assert(home_profile_write_avatar_chunk(data,12,true,true,sizeof(data))==ESP_ERR_INVALID_SIZE);
-    assert(home_profile_write_avatar_chunk(data,sizeof(data),true,false,sizeof(data))==ESP_OK);
-    assert(home_profile_write_avatar_chunk(data,1,false,true,sizeof(data))==ESP_ERR_INVALID_SIZE);
-    assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&!memcmp(data,readback,sizeof(data)));
+    assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&!memcmp(tones,readback,sizeof(tones)));
+    assert(home_profile_write_avatar_chunk(tones,12,true,true,sizeof(tones))==ESP_ERR_INVALID_SIZE);
+    assert(home_profile_write_avatar_chunk(tones,sizeof(tones),true,false,sizeof(tones))==ESP_OK);
+    assert(home_profile_write_avatar_chunk(tones,1,false,true,sizeof(tones))==ESP_ERR_INVALID_SIZE);
+    assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&!memcmp(tones,readback,sizeof(tones)));
     assert(home_profile_write_avatar_chunk(legacy,sizeof(legacy),true,true,sizeof(legacy))==ESP_OK);
     home_profile_init();assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&readback[HOME_PORTRAIT_HEADER_BYTES]==0xcc);
     uint8_t v2[HOME_AVATAR_V2_BYTES];memset(v2,0x1b,sizeof(v2));
@@ -75,15 +75,37 @@ static void portraits(void) {
     assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&readback[4]==0);
     assert(!memcmp(readback+HOME_PORTRAIT_HEADER_BYTES,v2,sizeof(v2)));
     for(size_t i=0;i<4;i++)assert(home_portrait_index(readback,i)==i);
-    data[4]=4;assert(home_profile_write_avatar_chunk(data,sizeof(data),true,true,sizeof(data))==ESP_ERR_INVALID_ARG);
+    tones[4]=4;assert(home_profile_write_avatar_chunk(tones,sizeof(tones),true,true,sizeof(tones))==ESP_ERR_INVALID_ARG);
     assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&readback[4]==0);
-    home_portrait_init_header(data,2);data[6]=1;
-    assert(home_profile_write_avatar_chunk(data,sizeof(data),true,true,sizeof(data))==ESP_ERR_INVALID_ARG);
-    home_portrait_init_header(data,2);memset(data+HOME_PORTRAIT_HEADER_BYTES,0,HOME_AVATAR_V2_BYTES);
-    memset(data+HOME_PORTRAIT_HEADER_BYTES+HOME_AVATAR_V2_BYTES,0xff,HOME_PORTRAIT_MASK_BYTES);
-    assert(home_portrait_index(data,0)==1);data[HOME_PORTRAIT_HEADER_BYTES+HOME_AVATAR_V2_BYTES]=0x7f;
-    assert(home_portrait_index(data,0)==0&&home_portrait_index(data,1)==1);
-    puts("Portrait storage: both legacy formats, masks, malformed headers, abort, failed commit and reboot: PASS");
+    home_portrait_init_header(tones,2);tones[6]=1;
+    assert(home_profile_write_avatar_chunk(tones,sizeof(tones),true,true,sizeof(tones))==ESP_ERR_INVALID_ARG);
+    home_portrait_init_header(tones,2);memset(tones+HOME_PORTRAIT_HEADER_BYTES,0,HOME_AVATAR_V2_BYTES);
+    memset(tones+HOME_PORTRAIT_HEADER_BYTES+HOME_AVATAR_V2_BYTES,0xff,HOME_PORTRAIT_MASK_BYTES);
+    assert(home_portrait_index(tones,0)==1);tones[HOME_PORTRAIT_HEADER_BYTES+HOME_AVATAR_V2_BYTES]=0x7f;
+    assert(home_portrait_index(tones,0)==0&&home_portrait_index(tones,1)==1);
+
+    for(size_t i=0;i<sizeof(color);i++)color[i]=(uint8_t)(i*7);
+    home_portrait_init_color_header(color,UI_THEME_COUNT,100);
+    memset(color+HOME_AVATAR_INDEX_OFFSET,0,HOME_AVATAR_COLOR_BYTES-HOME_AVATAR_INDEX_OFFSET);
+    color[HOME_AVATAR_INDEX_OFFSET]=0x21;
+    assert(home_portrait_upload_size(HOME_AVATAR_COLOR_BYTES)&&home_portrait_upload_size(HOME_AVATAR_MAX_BYTES));
+    assert(home_profile_write_avatar_chunk(color,sizeof(color),true,true,sizeof(color))==ESP_OK);
+    assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&!memcmp(color,readback,sizeof(color)));
+    assert(home_portrait_is_color(readback)&&home_portrait_valid_header(readback));
+    assert(home_portrait_color_index(readback,0)==2&&home_portrait_color_index(readback,1)==1);
+    home_portrait_init_color_header(color,UI_THEME_COUNT+1,50);
+    assert(home_profile_write_avatar_chunk(color,sizeof(color),true,true,sizeof(color))==ESP_ERR_INVALID_ARG);
+    home_portrait_init_color_header(color,3,101);
+    assert(home_profile_write_avatar_chunk(color,sizeof(color),true,true,sizeof(color))==ESP_ERR_INVALID_ARG);
+    home_portrait_init_color_header(color,3,50);color[7]=1;
+    assert(home_profile_write_avatar_chunk(color,sizeof(color),true,true,sizeof(color))==ESP_ERR_INVALID_ARG);
+    // Reject format/size mismatches: PT35 header in PT36 payload and vice versa.
+    home_portrait_init_header(color,3);
+    assert(home_profile_write_avatar_chunk(color,sizeof(color),true,true,sizeof(color))==ESP_ERR_INVALID_ARG);
+    home_portrait_init_color_header(tones,3,50);
+    assert(home_profile_write_avatar_chunk(tones,sizeof(tones),true,true,sizeof(tones))==ESP_ERR_INVALID_ARG);
+    assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&readback[4]==UI_THEME_COUNT&&readback[5]==100);
+    puts("Portrait storage: legacy formats, PT36 palette/indices, masks, malformed headers, abort, failed commit and reboot: PASS");
 }
 int main(int argc,char **argv) {
     assert(argc==2);assert(mkdir(SPIFFS_BASE,0700)==0);

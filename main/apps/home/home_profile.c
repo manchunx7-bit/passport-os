@@ -309,7 +309,7 @@ bool home_profile_has_avatar(void) {
 }
 
 esp_err_t home_profile_read_avatar(uint8_t *dst, size_t cap) {
-    if (!dst || cap < HOME_AVATAR_BYTES) return ESP_ERR_INVALID_ARG;
+    if (!dst || cap < HOME_AVATAR_MAX_BYTES) return ESP_ERR_INVALID_ARG;
     esp_err_t err = avatar_load();
     if (err != ESP_OK) return err;
     struct stat st;
@@ -319,10 +319,10 @@ esp_err_t home_profile_read_avatar(uint8_t *dst, size_t cap) {
     FILE *fp = fopen(avatar_path(), "rb");
     if (!fp) return ESP_ERR_NOT_FOUND;
     size_t got = 0;
-    if (st.st_size == HOME_AVATAR_BYTES) {
-        got = fread(dst, 1, HOME_AVATAR_BYTES, fp);
+    if (st.st_size == HOME_AVATAR_COLOR_BYTES || st.st_size == HOME_AVATAR_BYTES) {
+        got = fread(dst, 1, st.st_size, fp);
         fclose(fp);
-        return got == HOME_AVATAR_BYTES && home_portrait_valid_header(dst) ? ESP_OK : ESP_FAIL;
+        return got == (size_t)st.st_size && home_portrait_valid_for_size(dst, (size_t)st.st_size) ? ESP_OK : ESP_FAIL;
     }
     memset(dst, 0xff, HOME_AVATAR_BYTES);
     home_portrait_init_header(dst, 0);
@@ -407,11 +407,11 @@ esp_err_t home_profile_write_avatar_chunk(const uint8_t *data, size_t len,
         return avatar_save_failure(flushed ? "flush" : "close", ESP_FAIL,
                                    flushed ? flush_errno : close_errno);
     }
-    if (total_bytes == HOME_AVATAR_BYTES) {
+    if (total_bytes == HOME_AVATAR_COLOR_BYTES || total_bytes == HOME_AVATAR_BYTES) {
         uint8_t header[HOME_PORTRAIT_HEADER_BYTES];
         FILE *check = fopen(s_avatar_paths[s_avatar_upload_bank], "rb");
         const bool valid = check && fread(header, 1, sizeof(header), check) == sizeof(header) &&
-            home_portrait_valid_header(header);
+            home_portrait_valid_for_size(header, total_bytes);
         if (check) fclose(check);
         if (!valid) {
             remove(s_avatar_paths[s_avatar_upload_bank]);
