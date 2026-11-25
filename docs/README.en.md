@@ -4,9 +4,21 @@
 
 **A small device worth keeping in your daily routine.**
 
-Community firmware for the FoloToy AI Passport, based on ESP32-C3 with 8 MB Flash. It brings fifteen apps together with shared settings, Wi-Fi setup, themes, audio, battery reporting, and power management.
+Community firmware for the FoloToy AI Passport, based on ESP32-C3 with 8 MB Flash. It brings fifteen apps and five visual themes together with shared settings, Wi-Fi setup, audio, battery reporting, and power management.
 
-**Ask Xiaozhi to adjust the volume, play music or radio, and set reminders on the device.**
+**Ask Xiaozhi to adjust the volume, switch themes, play music, podcasts or audiobooks, and set reminders on the device.**
+
+## Latest Release
+
+Current release: **`v0.2.0-rc.62`** (2026-11-25) · [Get the latest firmware](https://ai-passport.folotoy.cn/plays/438/?v=5579-4) · [v0.2.0-rc.62 Release Notes (ZH)](release-rc62.md)
+
+Highlights in `v0.2.0-rc.62`:
+
+- **Podcast & Audiobook apps (15 apps total)**: Multi-channel browsing, saved resume positions, 5-book shelf persistence, and sleep timers.
+- **5th Theme — Obsidian Studio**: Layered charcoal cards paired with signal orange, sky blue, violet, and emerald accents.
+- **25 Xiaozhi voice tools & smoother TTS playback**: Added voice controls for themes, screen timeout, key sound, status/weather/bookshelf queries, home profile updates, and podcast/audiobook playback; larger audio ring buffer and active-dialogue Wi-Fi responsiveness.
+- **True-color RGB565 original portraits (`PT37`) & redesigned phone setup**: Lossless-detail 16-bit RGB565 original mode alongside five theme-derived palettes (`dot-matrix` / `flat` / `hybrid`), side-by-side preview cards, smooth GPU pinch/zoom, and compatibility with legacy portraits.
+- **Band-clipped rendering speedup & cross-platform build docs**: Single-object Tetris drawing, Windows/macOS/Linux build instructions, and updated [Safe Flashing Guide](safe-flashing.en.md).
 
 ## Why this project exists
 
@@ -18,19 +30,22 @@ People have suggested many personal improvements. Because everyone uses the hard
 
 ## Ask Xiaozhi to operate the device
 
-**Xiaozhi is the device's voice control entry point.** Double-press the OK button to enter a conversation, then use everyday language to adjust settings, open apps, play media, or manage tasks.
+**Xiaozhi is the device's voice control entry point.** Double-press the OK button to enter a conversation, then use everyday language across **25 device control tools** to adjust settings, open apps, play media, or manage tasks.
 
 | Example request | Device action |
 | --- | --- |
 | “Turn the volume down” or “Set screen brightness to 50%” | Adjust and save the device's volume or brightness |
+| “Switch to the Obsidian Studio theme” or “Check battery level” | Switch between the 5 themes, configure timeout or key sound, or report status/weather |
+| “Change my home signature to Stay Curious” | Update and save your Home screen name or signature |
 | “Play my liked songs and stop in half an hour” | Open NetEase Music, play your favorites, and set a stop timer |
 | “Play traffic radio from Shenzhen” | Find a station by city and keywords, then open Radio to play it |
+| “Play trending podcasts for 30 minutes” or “Resume my audiobook” | Start podcasts or resume your audiobook shelf with an optional sleep timer |
 | “Start a Pomodoro” or “How much time is left?” | Start a 25-minute focus session or read the actual remaining time; pause and resume are also supported |
 | “Remind me to drink water in ten minutes” or “Remind me to read every day at 9 pm” | Save a one-time or recurring reminder with an on-device alert and chime |
 | “Create a packing list: keys, phone, umbrella” or “Mark umbrella as done” | Save a checklist, then read and update its items and completion state |
 | “Open Stopwatch” or “Go to Home” | Open the requested app or screen |
 
-You can also ask for today's AI news, request podcasts or audiobooks (with sleep timers), switch themes or screen timeouts, and update your home signature. Robot expressions and an audio waveform follow listening and speech, longer text expands into a reading area, and all five themes (including Obsidian Studio) are supported.
+You can also ask for today's AI news. Robot expressions and an audio waveform follow listening and speech, longer text expands into a reading area, all five themes are supported, and active conversations boost Wi-Fi/audio buffering to reduce mid-reply pauses.
 
 Voice tools require a network connection and Xiaozhi configuration. NetEase playback also depends on your account and available tracks; radio depends on the online directory. Opening another app or starting media playback ends the current Xiaozhi conversation. Double-press OK again for further voice control. The device must remain powered on for reminders to trigger.
 
@@ -38,12 +53,12 @@ Voice tools require a network connection and Xiaozhi configuration. NetEase play
 
 | App | What it does | Requirements |
 | --- | --- | --- |
-| Home | Clock, profile, true-color/themed portraits, cards, weather, and air quality | Network for weather and air quality |
+| Home | Clock, profile, true-color RGB565/themed portraits, up to 6 color cards, weather, and air quality | Network for weather and air quality |
 | Radio | City and station selection, playback, and sleep timer | Wi-Fi and available online stations |
 | Podcast | Trending podcasts, daily picks, channel browsing, resume playback, and sleep timer | Wi-Fi and available online audio |
 | Audiobook | Four audiobook channels, 5-book shelf resume persistence, and sleep timer | Wi-Fi and available online audio |
-| AI Voice | Hardware microphone and configurable desktop hotkeys | Windows companion program |
-| Xiaozhi AI | Voice conversations, volume and brightness control, app opening, music and radio requests, timers, reminders, and lists | Network and Xiaozhi configuration; media needs its corresponding service |
+| AI Voice | Hardware microphone and configurable desktop hotkeys (device button or PC hold-to-talk) | Windows companion program |
+| Xiaozhi AI | Voice conversations and 25 device tools: volume/brightness/themes, app opening, music/podcast/audiobook requests, timers, reminders, and lists | Network and Xiaozhi configuration; media needs its corresponding service |
 | NetEase Music | Search songs, play playlists and daily recommendations | Wi-Fi, your own NetEase account, and available APIs |
 | Reminders | One-time and recurring reminders, chimes, and snooze | Works offline; uses the device clock |
 | Lists | View, check off, and manage tasks | Works offline |
@@ -54,9 +69,14 @@ Voice tools require a network connection and Xiaozhi configuration. NetEase play
 | Stopwatch | Timing, splits, pause, and resume | Works offline |
 | Pomodoro | Focus sessions, breaks, and completion chimes | Works offline |
 
+## Five themes & true-color portraits
+
+- **Themes**: Classic Green, Travel Instrument, Pixel White, Neon Dark, and Obsidian Studio.
+- **Offline Phone Setup (`192.168.4.1`)**: Side-by-side crop and live device preview cards with GPU pinch/zoom, true-color 16-bit RGB565 original portraits (`PT37`) with solid-background cutout and color retention, plus theme-derived `dot-matrix`, `flat`, and `hybrid` presets, offline 3,180-city lookup, and up to 6 color visiting cards.
+
 ## Latest firmware
 
-[Get the latest firmware](https://ai-passport.folotoy.cn/plays/438/?v=5579-4)
+[Get the latest firmware (v0.2.0-rc.62)](https://ai-passport.folotoy.cn/plays/438/?v=5579-4)
 
 ## Related projects
 
