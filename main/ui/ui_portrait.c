@@ -42,7 +42,7 @@ ui_portrait_style_t ui_portrait_style_get(size_t index)
     if (index >= ui_portrait_style_count()) return style;
     style.id = (uint8_t)index;
     if (index == 0) {
-        style.label = "默认";
+        style.label = "原图";
         return style;
     }
     const ui_theme_t theme = (ui_theme_t)(index - 1);

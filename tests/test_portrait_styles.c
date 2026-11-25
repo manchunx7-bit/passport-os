@@ -21,7 +21,7 @@ int main(void)
         assert(style.id == index);
         assert(style.label[0] != '\0');
         if (index == 0) {
-            assert(!strcmp(style.label, "默认"));
+            assert(!strcmp(style.label, "原图"));
             continue;
         }
         const ui_theme_t theme = (ui_theme_t)(index - 1);

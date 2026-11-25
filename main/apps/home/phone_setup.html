@@ -134,7 +134,7 @@ input::file-selector-button{min-height:34px;border:0;background:var(--green);col
 <details class="sub picker-help"><summary>选图没有反应？</summary><div class="detail-body"><label for="fileFallback">从文件选择</label><input type="file" id="fileFallback" name="portraitFile" aria-describedby="avatarPickerHelp"><p id="avatarPickerHelp" class="help">支持 JPEG、PNG。仍打不开时，用系统浏览器访问 192.168.4.1</p></div></details>
 <div id="photoTools" class="photo-tools" hidden>
 <fieldset class="portrait-presets"><legend>风格</legend><div class="portrait-segments" id="portraitStyles"></div></fieldset>
-<fieldset class="portrait-presets"><legend>效果</legend><div class="portrait-segments texture-segments">
+<fieldset class="portrait-presets" id="portraitTextureRow" hidden><legend>效果</legend><div class="portrait-segments texture-segments">
 <label><input type="radio" name="portraitTexture" id="portraitTextureDot" value="1"><span>点阵</span></label>
 <label><input type="radio" name="portraitTexture" id="portraitTextureFlat" value="2"><span>平涂</span></label>
 <label><input type="radio" name="portraitTexture" id="portraitTextureHybrid" value="3" checked><span>平涂＋点阵</span></label>
@@ -413,21 +413,12 @@ function portraitMedianPalette(colors,count){
  groups.forEach((group,i)=>{let r=0,g=0,b=0;for(const n of group){r+=colors[n*3];g+=colors[n*3+1];b+=colors[n*3+2]}const size=group.length||1;palette[i+1]=(Math.round(r/size)<<16)|(Math.round(g/size)<<8)|Math.round(b/size)});
  return palette;
 }
-function portraitColorPixels(data,tone,mask,w,h,retention,texture=portraitTexture){
- const bayer=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
- let active=mask;
- if(texture===1){
-  active=new Uint8Array(mask.length);
-  for(let p=0;p<mask.length;p++)if(mask[p]){
-   const x=p%w,y=(p/w)|0,t=(bayer[(y%4)*4+x%4]+.5)/16,edge=(x>0&&!mask[p-1])||(x<w-1&&!mask[p+1])||(y>0&&!mask[p-w])||(y<h-1&&!mask[p+w]);
-   if(.13+.78*(tone[p]/255)**.95>t||(edge&&(x+y)%3===0))active[p]=1;
-  }
- }
- let used=0;for(let p=0;p<active.length;p++)if(active[p])used++;
+function portraitColorPixels(data,tone,mask,w,h,retention){
+ let used=0;for(let p=0;p<mask.length;p++)if(mask[p])used++;
  if(!used)return {indices:new Uint8Array(mask.length),palette:new Uint32Array(16)};
  const colors=new Uint8Array(used*3),positions=new Uint32Array(used),keep=retention/100;let n=0;
- for(let p=0;p<active.length;p++)if(active[p]){
-  const i=p*4,r=data[i],g=data[i+1],b=data[i+2],y=(r*77+g*151+b*28)>>8,x=p%w,py=(p/w)|0,v=texture===3?Math.max(0,Math.min(255,tone[p]+(((bayer[(py%4)*4+x%4]+.5)/16)-.5)*20)):tone[p];
+ for(let p=0;p<mask.length;p++)if(mask[p]){
+  const i=p*4,r=data[i],g=data[i+1],b=data[i+2],y=(r*77+g*151+b*28)>>8,v=tone[p];
   positions[n]=p;colors[n*3]=Math.max(0,Math.min(255,Math.round(v+(r-y)*keep)));colors[n*3+1]=Math.max(0,Math.min(255,Math.round(v+(g-y)*keep)));colors[n*3+2]=Math.max(0,Math.min(255,Math.round(v+(b-y)*keep)));n++;
  }
  const palette=portraitMedianPalette(colors,used),indices=new Uint8Array(mask.length);
@@ -453,7 +444,7 @@ function portraitThemePixels(tone,mask,w,h,style,texture=portraitTexture){
 function portraitPixelsForDevice(data,w,h,removeBackground,brightness,retention,style,texture=portraitTexture){
  const {gray,mask}=portraitPrepare(data,w,h,removeBackground),tone=new Uint8Array(w*h);
  for(let p=0;p<tone.length;p++)if(mask[p])tone[p]=Math.max(0,Math.min(255,gray[p]+brightness));
- return style>0?portraitThemePixels(tone,mask,w,h,style,texture):portraitColorPixels(data,tone,mask,w,h,retention,texture);
+ return style>0?portraitThemePixels(tone,mask,w,h,style,texture):portraitColorPixels(data,tone,mask,w,h,retention);
 }
 function portraitPacked(){
  const retention=Math.max(0,Math.min(100,Math.round(Number($('portraitColor').value)||0))),count=PORTRAIT.w*PORTRAIT.h,{indices,palette}=portraitPixelsForDevice(portraitPixels(),PORTRAIT.w,PORTRAIT.h,$('portraitBackground').checked,Number($('portraitBrightness').value)||0,retention,portraitStyle,portraitTexture),packed=new Uint8Array(40+count/2);
@@ -488,7 +479,8 @@ function setPortraitStyle(value){
  const id=Number(value),match=portraitStyles.find(style=>style.id===id);
  portraitStyle=match?match.id:0;
  for(const input of portraitStyleInputs)input.checked=Number(input.value)===portraitStyle;
- $('portraitColorRow')?.classList?.toggle('is-muted',portraitStyle>0);
+ const texRow=$('portraitTextureRow');if(texRow)texRow.hidden=portraitStyle===0;
+ const colorRow=$('portraitColorRow');if(colorRow)colorRow.hidden=portraitStyle>0;
  previewPortrait();
 }
 function setPortraitTexture(value){

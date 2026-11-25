@@ -4,7 +4,7 @@ const algorithm=html.slice(html.indexOf('function portraitLocalContrast('),html.
 assert.ok(!html.includes('portraitStyleClassic'),'style ids must not be hardcoded in the page');
 const elements={portraitBackground:{checked:false},portraitBrightness:{value:'0'},portraitColor:{value:'50'}};
 const themePalettes=[[0x254d36,0x4b8060,0x80b795,0xa8edbb],[0x484d43,0x797d69,0xb6b7a0,0xeee7d6],[0x374543,0x637771,0xadbfb1,0xf1eee6],[0x343c55,0x657593,0xb3c5d8,0xf4f4f6],[0x343740,0x646978,0xa8aeb8,0xf5f3ee]];
-const portraitStyles=[{id:0,label:'默认',palette:[0,0,0,0]},...themePalettes.map((palette,i)=>({id:i+1,label:'主题'+(i+1),palette}))];
+const portraitStyles=[{id:0,label:'原图',palette:[0,0,0,0]},...themePalettes.map((palette,i)=>({id:i+1,label:'主题'+(i+1),palette}))];
 const context=vm.createContext({$:id=>elements[id],PORTRAIT:{w:96,h:138},portrait:null,portraitStyle:0,portraitStyleInputs:[],portraitPreparedCache:null,portraitPalette:[0,1,2,255],portraitStyles,fixture:null});
 vm.runInContext(algorithm,context);
 function rgba(values){return Uint8ClampedArray.from(values.flatMap(v=>[v,v,v,255]))}
@@ -85,8 +85,13 @@ for(const style of [1,0]){
    assert.ok(Array.from({length:96*138},(_,n)=>{const x=(packed[40+(n>>1)]>>(n&1?0:4))&15;return x===0||x===4}).every(Boolean),'dot-matrix uses highlight + transparent');
   }
  }
- assert.notDeepEqual(variants[0],variants[1],'dot vs flat differs for style '+style);
- assert.notDeepEqual(variants[1],variants[2],'flat vs hybrid differs for style '+style);
+ if(style===0){
+  assert.deepEqual(variants[0],variants[1],'original style ignores dot vs flat');
+  assert.deepEqual(variants[1],variants[2],'original style ignores flat vs hybrid');
+ }else{
+  assert.notDeepEqual(variants[0],variants[1],'dot vs flat differs for style '+style);
+  assert.notDeepEqual(variants[1],variants[2],'flat vs hybrid differs for style '+style);
+ }
  textureOutputs[style]=variants;
 }
 context.setPortraitTexture(999);assert.equal(vm.runInContext('portraitTexture',context),3,'unknown texture falls back to hybrid');
