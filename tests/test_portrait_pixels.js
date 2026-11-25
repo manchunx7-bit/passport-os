@@ -73,4 +73,21 @@ const deterministic=Buffer.from(context.portraitPacked());
 assert.deepEqual(Array.from(context.portraitPacked()),Array.from(deterministic),'preview and save are deterministic');
 assert.equal(context.portraitColor(deterministic,0),0);
 context.setPortraitStyle(999);assert.equal(context.portraitStyle,0,'unknown style falls back to the default');
-console.log('Portrait colors: PT36 packing, 15-color palette, retention slider, four theme styles, masks, brightness and determinism: PASS');
+const textureOutputs={};
+for(const style of [1,0]){
+ context.setPortraitStyle(style);
+ const variants=[];
+ for(const texture of [1,2,3]){
+  context.setPortraitTexture(texture);
+  const packed=Buffer.from(context.portraitPacked());
+  variants.push(packed);
+  if(style===1&&texture===1){
+   assert.ok(Array.from({length:96*138},(_,n)=>{const x=(packed[40+(n>>1)]>>(n&1?0:4))&15;return x===0||x===4}).every(Boolean),'dot-matrix uses highlight + transparent');
+  }
+ }
+ assert.notDeepEqual(variants[0],variants[1],'dot vs flat differs for style '+style);
+ assert.notDeepEqual(variants[1],variants[2],'flat vs hybrid differs for style '+style);
+ textureOutputs[style]=variants;
+}
+context.setPortraitTexture(999);assert.equal(vm.runInContext('portraitTexture',context),3,'unknown texture falls back to hybrid');
+console.log('Portrait colors: PT36 packing, 15-color palette, retention slider, 5 themes, 3 textures, masks, brightness and determinism: PASS');
