@@ -4,68 +4,86 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light">
-<meta name="theme-color" content="#f2f3ee">
+<meta name="theme-color" content="#f4f4f0">
 <title>AI 护照 · 手机设置</title>
 <style>
-:root{--bg:#f2f3ee;--card:#fff;--ink:#16241c;--muted:#6b756d;--line:#e3e6de;--field:#f6f7f3;--green:#1f5c3f;--green-dark:#16472f;--tint:#e6efe6;--error:#a12c23;--r:16px;--r-s:12px;color-scheme:light}
+:root{--bg:#f4f4f0;--card:#ffffff;--ink:#16191d;--muted:#68707a;--line:rgba(22,25,29,.09);--field:#f1f2ee;--green:#166549;--green-dark:#0f4d37;--tint:#e6f2ec;--error:#b42b23;--stage:#15181e;--r:18px;--r-s:12px;color-scheme:light}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI","Microsoft YaHei",sans-serif;accent-color:var(--green);-webkit-font-smoothing:antialiased}
-::selection{background:#c5dec9}:focus-visible{outline:3px solid #4b8a62;outline-offset:2px}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI","Microsoft YaHei",sans-serif;accent-color:var(--green);-webkit-font-smoothing:antialiased}
+::selection{background:#c5e2d3}:focus-visible{outline:3px solid #3c8d6d;outline-offset:2px}[hidden]{display:none!important}
 .vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.shell{max-width:480px;margin:auto;padding:max(18px,env(safe-area-inset-top)) 16px max(32px,env(safe-area-inset-bottom))}
-.brand{display:flex;align-items:center;gap:10px;font-weight:650;font-size:15px;letter-spacing:.02em}.brand svg{width:28px;height:28px;flex:none;shape-rendering:crispEdges}
-.steps{display:flex;list-style:none;padding:0;margin:0 0 0 auto;gap:6px}.steps li{width:22px;height:6px;border-radius:3px;background:var(--line);font-size:0;overflow:hidden}.steps li.done{background:#9cb8a2}.steps li[aria-current=step]{width:34px;background:var(--green)}
-h1{font-size:28px;line-height:1.25;letter-spacing:-.02em;font-weight:700;margin:28px 0 6px;text-wrap:balance}h1:focus{outline:none}
-.intro{color:var(--muted);font-size:14px;margin:0 0 20px}
+.shell{max-width:460px;margin:auto;padding:max(14px,env(safe-area-inset-top)) 14px max(34px,env(safe-area-inset-bottom))}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 4px 2px;font-weight:700;font-size:15px;letter-spacing:.01em}.brand svg{width:28px;height:28px;flex:none;shape-rendering:crispEdges;border-radius:7px}
+.steps{display:flex;list-style:none;padding:0;margin:0 0 0 auto;gap:6px}.steps li{width:20px;height:6px;border-radius:99px;background:#d8dbd4;font-size:0;overflow:hidden;transition:width .2s,background .2s}.steps li.done{background:#8abaa5}.steps li[aria-current=step]{width:32px;background:var(--green)}
+h1{font-size:24px;line-height:1.25;letter-spacing:-.02em;font-weight:750;margin:18px 0 4px;padding:0 2px;text-wrap:balance}h1:focus{outline:none}
+.intro{color:var(--muted);font-size:13.5px;margin:0 0 14px;padding:0 2px}
 p{margin:0}
-.card{background:var(--card);border-radius:var(--r);padding:16px;margin:12px 0;box-shadow:0 1px 0 rgba(22,36,28,.04)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin:12px 0;box-shadow:0 2px 10px rgba(15,23,42,.035)}
 .field+.field{margin-top:14px}
-label,.field-title{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
-.optional{font-weight:400;margin-left:6px}
-input[type=text],input[type=password],input[type=number],input:not([type]),select,textarea{width:100%;min-height:48px;border:1px solid transparent;border-radius:var(--r-s);padding:12px 14px;background:var(--field);color:var(--ink);font:inherit;line-height:1.4;-webkit-appearance:none;appearance:none}
+label,.field-title{display:block;font-size:12.5px;font-weight:650;color:var(--muted);margin-bottom:6px;letter-spacing:.01em}
+.optional{font-weight:400;margin-left:6px;opacity:.85}
+input[type=text],input[type=password],input[type=number],input:not([type]),select,textarea{width:100%;min-height:46px;border:1px solid transparent;border-radius:var(--r-s);padding:11px 13px;background:var(--field);color:var(--ink);font:inherit;line-height:1.4;-webkit-appearance:none;appearance:none;transition:border-color .15s,background .15s}
 input:focus,select:focus,textarea:focus{border-color:var(--green);background:#fff;outline:none}
-input::placeholder,textarea::placeholder{color:#9aa39b}textarea{resize:vertical}
-select{padding-right:40px;text-overflow:ellipsis;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b756d' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 16px center}
+input::placeholder,textarea::placeholder{color:#9ca39c}textarea{resize:vertical}
+select{padding-right:38px;text-overflow:ellipsis;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2368707a' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 15px center}
 .row{display:flex;align-items:center;justify-content:space-between;gap:12px}.row label{margin:0}
 .pair{display:grid;grid-template-columns:2fr 3fr;gap:8px}.pair.even{grid-template-columns:1fr 1fr}.pair.proxy{grid-template-columns:minmax(0,1fr) 88px}.pair.proxy input{min-width:0}.proxy-settings{padding-top:4px}.stack>*+*{margin-top:8px}
-button{font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}button:disabled{cursor:default;opacity:.55}
-.primary,.secondary{display:block;width:100%;min-height:52px;padding:12px 18px;border:0;border-radius:var(--r-s);font-weight:600;font-size:16px}
-.primary{background:var(--green);color:#fff}.primary:active{background:var(--green-dark)}
+button{font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}button:disabled{cursor:default;opacity:.52}
+.primary,.secondary{display:block;width:100%;min-height:50px;padding:12px 18px;border:0;border-radius:14px;font-weight:650;font-size:15.5px}
+.primary{background:var(--green);color:#fff;box-shadow:0 4px 12px rgba(22,101,73,.2)}.primary:active{background:var(--green-dark)}
 .secondary{background:var(--tint);color:var(--green)}.secondary+.secondary,.primary+.secondary{margin-top:10px}
-.text-button{background:none;border:0;color:var(--green);padding:8px 0;min-height:40px;font-size:14px;font-weight:500}
+.text-button{background:none;border:0;color:var(--green);padding:6px 0;min-height:38px;font-size:13.5px;font-weight:600}
 .center{display:block;margin:6px auto 0}
-.password{position:relative}.password input{padding-right:64px}.password button{position:absolute;right:4px;top:4px;height:40px;min-width:54px;border:0;background:none;color:var(--green);font-size:14px}
+.password{position:relative}.password input{padding-right:64px}.password button{position:absolute;right:4px;top:3px;height:40px;min-width:54px;border:0;background:none;color:var(--green);font-size:13.5px;font-weight:600}
 .help{color:var(--muted);font-size:12.5px;margin-top:6px}.help:empty{display:none}
-.status{font-size:13.5px;margin:12px 2px;overflow-wrap:anywhere}.status:empty{display:none}.status[data-error=true]{color:var(--error)}
-.actions{margin-top:20px}
-.note{text-align:center;color:var(--muted);font-size:12px;margin-top:22px}
-.connection{display:inline-flex;align-items:center;gap:6px;background:var(--tint);color:var(--green);font-size:13px;font-weight:500;border-radius:999px;padding:5px 12px 5px 8px;margin:0 0 10px;max-width:100%}.connection svg{width:16px;height:16px;flex:none}.connection span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.group{background:var(--card);border-radius:var(--r);margin:12px 0;overflow:hidden}
-.group>details+details{border-top:1px solid var(--line)}
+.status{font-size:13px;margin:10px 2px;overflow-wrap:anywhere}.status:empty{display:none}.status[data-error=true]{color:var(--error)}
+.actions{margin-top:18px}
+.note{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
+.connection{display:inline-flex;align-items:center;gap:6px;background:var(--tint);color:var(--green);font-size:12.5px;font-weight:600;border-radius:999px;padding:5px 12px 5px 8px;margin:0 0 10px;max-width:100%}.connection svg{width:15px;height:15px;flex:none}.connection span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.group{display:grid;gap:10px;margin:14px 0}
+.group>details{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,.035)}
 details>summary{list-style:none;cursor:pointer}details>summary::-webkit-details-marker{display:none}
-.group>details>summary{display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 16px;font-weight:600;font-size:15.5px}
-.group>details>summary small{margin-left:auto;font-size:12.5px;font-weight:400;color:var(--muted);white-space:nowrap}
-.group>details>summary::after{content:"";width:7px;height:7px;border-right:2px solid #a3aba4;border-bottom:2px solid #a3aba4;transform:rotate(-45deg);margin:0 2px 0 4px;flex:none;transition:transform .15s}
+.group>details>summary{display:flex;align-items:center;gap:12px;min-height:58px;padding:10px 15px;font-weight:650;font-size:15px}
+.group>details>summary small{margin-left:auto;font-size:12px;font-weight:500;color:var(--muted);background:var(--field);padding:3px 9px;border-radius:999px;white-space:nowrap}
+.group>details>summary::after{content:"";width:7px;height:7px;border-right:2px solid #9aa1aa;border-bottom:2px solid #9aa1aa;transform:rotate(-45deg);margin:0 2px 0 2px;flex:none;transition:transform .16s}
 .group>details[open]>summary::after{transform:rotate(45deg)}
-.ico{width:32px;height:32px;border-radius:9px;background:var(--tint);color:var(--green);display:grid;place-items:center;flex:none}.ico svg{width:19px;height:19px}
-.detail-body{padding:0 16px 18px}.detail-body>*+*{margin-top:12px}
-.sub>summary{font-size:13.5px;color:var(--green);font-weight:500;padding:4px 0}.sub .detail-body{padding:10px 0 0}
+.group>details[open]>summary{border-bottom:1px solid var(--line)}
+.ico{width:34px;height:34px;border-radius:10px;background:var(--tint);color:var(--green);display:grid;place-items:center;flex:none}.ico svg{width:18px;height:18px}
+.detail-body{padding:14px 15px 16px}.detail-body>*+*{margin-top:12px}
+.sub>summary{font-size:13px;color:var(--green);font-weight:600;padding:4px 0}.sub .detail-body{padding:10px 0 0}
 .download-link{display:block;min-height:48px;padding:12px;border-radius:var(--r-s);background:var(--green);color:#fff;text-align:center;text-decoration:none;font-weight:600}.download-link.secondary-link{background:var(--tint);color:var(--green);font-size:14px}
 a{color:var(--green)}
-.file-pick{display:block;padding:14px;border:1.5px dashed #b9c6b9;border-radius:var(--r-s);background:var(--field)}.file-pick label{color:var(--ink);margin:0 0 8px}
-.file-pick input,.sub input[type=file]{display:block;width:100%;min-height:44px;font-size:14px;cursor:pointer}
-input::file-selector-button{min-height:40px;border:0;background:var(--green);color:#fff;padding:8px 14px;border-radius:9px;margin-right:10px;font:inherit;font-size:14px}
-.portrait-presets{border:0;padding:0;margin:0;min-width:0}.portrait-presets legend{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;padding:0}
-.portrait-segments{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;background:var(--field);border-radius:var(--r-s)}.portrait-segments label{position:relative;margin:0;min-width:0;cursor:pointer;color:var(--ink);font-weight:500}.portrait-segments input{position:absolute;opacity:0;width:1px;height:1px}.portrait-segments span{display:flex;align-items:center;justify-content:center;min-height:40px;padding:4px;font-size:13px;text-align:center;border-radius:9px}.portrait-segments input:checked+span{color:#fff;background:var(--green)}.portrait-segments input:focus-visible+span{outline:3px solid #4b8a62}
-.crop-layout{display:flex;align-items:flex-end;justify-content:center;gap:16px;margin-top:14px}#vp{position:relative;width:192px;height:300px;overflow:hidden;border-radius:10px;background:#dde5d7;touch-action:none}#pv{position:absolute;pointer-events:none;user-select:none;max-width:none}#binc{width:96px;height:150px;border-radius:6px;background:#07170f;image-rendering:pixelated}
-.caption{display:block;text-align:center;font-size:12px;color:var(--muted);font-weight:400;margin:6px 0 0}
-input[type=range]{width:100%;min-height:36px}.slider{margin-top:14px}.slider-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.slider-head .caption{display:inline;margin:0;text-align:left}.slider-value{display:inline-flex;align-items:center;gap:3px}.slider-value input{width:68px;min-height:36px;padding:3px 6px;border:1px solid var(--line);border-radius:9px;background:var(--field);color:var(--ink);font:inherit;font-size:16px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}.slider-unit{font-size:12px;color:var(--muted);min-width:10px}.slider input[type=range]{display:block;width:100%;min-height:34px;margin:0}.slider-ticks{position:relative;height:8px;margin:-2px 9px 0}.slider-ticks i{position:absolute;top:0;width:1px;height:6px;background:#c3cbc3;transform:translateX(-.5px)}.check{display:flex;align-items:center;gap:8px;color:var(--ink);font-weight:400;font-size:14px;margin:0}
+.file-pick{display:block;padding:14px;border:1.5px dashed #bfd1c7;border-radius:14px;background:linear-gradient(180deg,#f8fbf9,#f2f5f2)}.file-pick label{color:var(--ink);margin:0 0 8px}
+.file-pick input,.sub input[type=file]{display:block;width:100%;min-height:42px;font-size:13.5px;cursor:pointer}
+input::file-selector-button{min-height:38px;border:0;background:var(--green);color:#fff;padding:7px 14px;border-radius:9px;margin-right:10px;font:inherit;font-size:13.5px;font-weight:600}
+.portrait-presets{border:0;padding:0;margin:0;min-width:0}.portrait-presets legend{font-size:12.5px;font-weight:650;color:var(--muted);margin-bottom:8px;padding:0}
+.portrait-segments{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.portrait-segments label{position:relative;margin:0;min-width:0;cursor:pointer;color:var(--ink);font-weight:550}.portrait-segments input{position:absolute;opacity:0;width:1px;height:1px}.portrait-segments span{display:flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:4px 6px;font-size:12.5px;text-align:center;border-radius:10px;background:var(--field);border:1.5px solid transparent;transition:all .15s}.portrait-segments i{width:10px;height:10px;border-radius:99px;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}.portrait-segments input:checked+span{color:#fff;background:var(--stage);border-color:var(--stage);font-weight:650}.portrait-segments input:focus-visible+span{outline:3px solid #3c8d6d}
+.crop-stage{margin-top:12px;padding:14px 12px;border-radius:16px;background:linear-gradient(160deg,#1a1d24,#111318);border:1px solid rgba(255,255,255,.08)}
+.crop-layout{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+.vp-wrap{position:relative;flex:none}
+#vp{position:relative;width:192px;height:276px;overflow:hidden;border-radius:12px;background:#0d1015;box-shadow:0 0 0 1px rgba(255,255,255,.16),0 8px 20px rgba(0,0,0,.35);touch-action:none;cursor:grab}#vp:active{cursor:grabbing}
+#pv{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;pointer-events:none;user-select:none;max-width:none}
+.vp-guide{position:absolute;inset:10px;border:1px dashed rgba(255,255,255,.24);border-radius:8px;pointer-events:none}
+.device-card{display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 10px 8px;border-radius:14px;background:#20242d;border:1px solid rgba(255,255,255,.09)}
+#binc{width:96px;height:138px;border-radius:6px;background:#07170f;image-rendering:pixelated;box-shadow:0 0 0 1px rgba(255,255,255,.1);transition:opacity .12s}#binc.is-pending{opacity:.62}
+.stage-hint{text-align:center;color:#98a2b0;font-size:11.5px;margin-top:10px;letter-spacing:.02em}
+.device-cap{margin:0;font-size:11.5px;color:#aeb7c2;font-weight:500}
+.caption{display:block;font-size:12.5px;color:var(--muted);font-weight:600;margin:0}
+.controls-card{margin-top:12px;padding:12px 13px;border-radius:14px;background:var(--field);border:1px solid var(--line);display:grid;gap:12px}
+.slider{margin:0}.slider.is-muted{opacity:.48}.slider-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}.slider-head .caption{display:inline;margin:0;text-align:left;color:var(--ink)}.slider-value{display:inline-flex;align-items:center;gap:4px}.slider-value input{width:64px;min-height:32px;padding:2px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-size:14px;font-weight:650;text-align:right;font-variant-numeric:tabular-nums}.slider-unit{font-size:12px;color:var(--muted);min-width:12px}
+.slider input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:32px;margin:0;background:transparent;cursor:pointer;touch-action:pan-y}
+.slider input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:99px;background:#d6dad2}
+.slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;border-radius:50%;background:var(--green);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.28)}
+.slider input[type=range]::-moz-range-track{height:6px;border-radius:99px;background:#d6dad2;border:0}
+.slider input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--green);border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.28)}
+.slider-ticks{display:none}
+.check{display:flex;align-items:center;gap:9px;color:var(--ink);font-weight:500;font-size:13.5px;margin:0;padding-top:4px;border-top:1px solid var(--line);min-height:34px;cursor:pointer}.check input{width:18px;height:18px;margin:0;accent-color:var(--green)}
 #sharec{display:block;width:150px;height:200px;margin:0 auto;border-radius:8px;background:#fff;border:1px solid var(--line)}
 .saved{font-size:12.5px;color:var(--muted)}
 .card-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}.card-thumb{width:54px;height:72px;object-fit:contain;background:var(--field);border-radius:6px;flex-shrink:0}.card-meta{flex:1;min-width:0}.card-meta p{margin:0 0 6px;font-size:13px;color:var(--muted)}.card-actions{display:flex;flex-wrap:wrap;gap:6px}.card-actions button{min-height:34px;padding:4px 10px;font-size:13px;border:0;border-radius:8px;background:var(--field);color:var(--ink)}.card-actions .remove{color:var(--error)}.card-empty{color:var(--muted);font-size:13px}
 .success-mark{width:64px;height:64px;color:var(--green);margin:40px 0 0}
 .recap strong{display:block;font-size:20px;font-weight:650;overflow-wrap:anywhere}.recap span{color:var(--muted);font-size:14px}
-@media(min-width:760px){.shell{padding-top:48px}}
+@media(min-width:760px){.shell{padding-top:36px}}
 @media(prefers-reduced-motion:no-preference){.primary,.secondary{transition:background .15s ease-out}}
 </style>
 </head>
@@ -114,11 +132,13 @@ input[type=range]{width:100%;min-height:36px}.slider{margin-top:14px}.slider-hea
 <details class="sub picker-help"><summary>选图没有反应？</summary><div class="detail-body"><label for="fileFallback">从文件选择</label><input type="file" id="fileFallback" name="portraitFile" aria-describedby="avatarPickerHelp"><p id="avatarPickerHelp" class="help">支持 JPEG、PNG。仍打不开时，用系统浏览器访问 192.168.4.1</p></div></details>
 <div id="photoTools" class="photo-tools" hidden>
 <fieldset class="portrait-presets"><legend>风格</legend><div class="portrait-segments" id="portraitStyles"></div></fieldset>
-<div class="crop-layout"><div id="vp" style="height:276px"><img id="pv" alt="人像取景预览"></div><div><canvas id="binc" width="96" height="138" style="height:138px" aria-label="设备人像预览"></canvas><p class="caption">设备效果</p></div></div>
+<div class="crop-stage"><div class="crop-layout"><div class="vp-wrap"><div id="vp"><img id="pv" alt="人像取景预览"><div class="vp-guide" aria-hidden="true"></div></div></div><div class="device-card"><canvas id="binc" width="96" height="138" aria-label="设备人像预览"></canvas><p class="device-cap">设备实效</p></div></div><p class="stage-hint">拖动或双指调整取景 · 停止滑动后刷新预览</p></div>
+<div class="controls-card">
 <div class="slider"><div class="slider-head"><label for="zm" class="caption">缩放</label><span class="slider-value"><input type="number" id="zmValue" min="100" max="400" step="10" value="100" inputmode="numeric" aria-label="缩放数值"><span class="slider-unit">%</span></span></div><input type="range" id="zm" min="100" max="400" step="10" value="100"><div class="slider-ticks" id="zmTicks" aria-hidden="true"></div></div>
 <div class="slider"><div class="slider-head"><label for="portraitBrightness" class="caption">明暗</label><span class="slider-value"><input type="number" id="portraitBrightnessValue" min="-48" max="48" step="8" value="0" inputmode="numeric" aria-label="明暗数值"></span></div><input type="range" id="portraitBrightness" min="-48" max="48" step="8" value="0"><div class="slider-ticks" id="portraitBrightnessTicks" aria-hidden="true"></div></div>
-<div class="slider"><div class="slider-head"><label for="portraitColor" class="caption">颜色</label><span class="slider-value"><input type="number" id="portraitColorValue" min="0" max="100" step="10" value="50" inputmode="numeric" aria-label="颜色保留度"></span></div><input type="range" id="portraitColor" min="0" max="100" step="10" value="50"><div class="slider-ticks" id="portraitColorTicks" aria-hidden="true"></div></div>
-<label class="check"><input type="checkbox" id="portraitBackground"> 去除纯色背景</label></div>
+<div class="slider" id="portraitColorRow"><div class="slider-head"><label for="portraitColor" class="caption">颜色</label><span class="slider-value"><input type="number" id="portraitColorValue" min="0" max="100" step="10" value="50" inputmode="numeric" aria-label="颜色保留度"><span class="slider-unit">%</span></span></div><input type="range" id="portraitColor" min="0" max="100" step="10" value="50"><div class="slider-ticks" id="portraitColorTicks" aria-hidden="true"></div></div>
+<label class="check"><input type="checkbox" id="portraitBackground"> 去除纯色背景</label>
+</div></div>
 <p id="avatarStatus" class="status" role="status"></p></div></details>
 
 <details id="cardSection"><summary><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.6 1.7-2.4 3-2.4s2.4.8 3 2.4M14.5 10h3.5M14.5 13.5h3.5"/></svg></span>随身名片<small id="shareState">最多 6 张</small></summary><div class="detail-body">
@@ -303,13 +323,23 @@ $('retryMuse').onclick=()=>loadMuse();$('useSavedMuse').onclick=()=>loadMuse(tru
 $('museSection').ontoggle=()=>{if($('museSection').open&&!museLoaded)return loadMuse()};
 
 // Portrait cropping happens on the phone, preserving the device's small memory budget.
-const VP={w:192,h:276},PORTRAIT={w:96,h:138};let portraitPalette=[0x03120b,0x3a5b45,0x719c80,0xa8edbb],portraitStyles=[],portraitStyleInputs=[];let zoom=1,ox=0,oy=0,base=1,portrait=null,shareImg=null,imageLoading=0,portraitStyle=0,portraitSampleCache=null,portraitPreparedCache=null;
+const VP={w:192,h:276},PORTRAIT={w:96,h:138};let portraitPalette=[0x03120b,0x3a5b45,0x719c80,0xa8edbb],portraitStyles=[],portraitStyleInputs=[];let zoom=1,ox=0,oy=0,base=1,portrait=null,portraitSource=null,portraitSourceScale=1,portraitSampleCanvas=null,portraitSampleCtx=null,previewTimer=null,shareImg=null,imageLoading=0,portraitStyle=0,portraitSampleCache=null,portraitPreparedCache=null;
 const CARD_MAX=6,CARD_BYTES=24576;let cards=[],cardsDirty=false,cardsReady=false,cardBusy=false,replaceSlot=null,cardStorage=null;
-function clamp(){if(!portrait)return;const s=base*zoom;ox=Math.min(0,Math.max(VP.w-portrait.naturalWidth*s,ox));oy=Math.min(0,Math.max(VP.h-portrait.naturalHeight*s,oy));$('pv').style.width=portrait.naturalWidth*s+'px';$('pv').style.left=ox+'px';$('pv').style.top=oy+'px'}
+function clamp(){
+ if(!portrait)return;
+ const s=base*zoom,pv=$('pv');
+ ox=Math.min(0,Math.max(VP.w-portrait.naturalWidth*s,ox));
+ oy=Math.min(0,Math.max(VP.h-portrait.naturalHeight*s,oy));
+ if(pv._b!==base){pv._b=base;pv.style.width=portrait.naturalWidth*base+'px';pv.style.height=portrait.naturalHeight*base+'px'}
+ pv.style.transform=`translate3d(${ox}px,${oy}px,0) scale(${zoom})`;
+}
 function portraitPixels(){
  const key=[zoom,ox,oy,base].join(',');if(portraitSampleCache?.image===portrait&&portraitSampleCache.key===key)return portraitSampleCache.data;
- const c=document.createElement('canvas');c.width=PORTRAIT.w;c.height=PORTRAIT.h;const g=c.getContext('2d'),s=base*zoom;g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(portrait,-ox/s,-oy/s,VP.w/s,VP.h/s,0,0,c.width,c.height);
- const data=g.getImageData(0,0,c.width,c.height).data;portraitSampleCache={image:portrait,key,data};return data;
+ if(!portraitSampleCanvas){portraitSampleCanvas=document.createElement('canvas');portraitSampleCanvas.width=PORTRAIT.w;portraitSampleCanvas.height=PORTRAIT.h;portraitSampleCtx=portraitSampleCanvas.getContext('2d');portraitSampleCtx.imageSmoothingEnabled=true;portraitSampleCtx.imageSmoothingQuality='high'}
+ const src=portraitSource||portrait,k=portraitSource?portraitSourceScale:1,s=base*zoom;
+ portraitSampleCtx.clearRect?.(0,0,PORTRAIT.w,PORTRAIT.h);
+ portraitSampleCtx.drawImage(src,(-ox/s)*k,(-oy/s)*k,(VP.w/s)*k,(VP.h/s)*k,0,0,PORTRAIT.w,PORTRAIT.h);
+ const data=portraitSampleCtx.getImageData(0,0,PORTRAIT.w,PORTRAIT.h).data;portraitSampleCache={image:portrait,key,data};return data;
 }
 function portraitLocalContrast(lum,mask,w,h){
  if(w<12||h<16)return lum;
@@ -332,6 +362,9 @@ function portraitLocalContrast(lum,mask,w,h){
 }
 function portraitPrepare(data,w,h,removeBackground){
  if(portraitPreparedCache?.data===data&&portraitPreparedCache.removeBackground===removeBackground&&portraitPreparedCache.w===w&&portraitPreparedCache.h===h)return portraitPreparedCache;
+ const range=portraitPrepare._r||(portraitPrepare._r=Float32Array.from({length:256},(_,i)=>Math.exp(-i*i/(2*24*24))));
+ let kDx=portraitPrepare._dx,kDy=portraitPrepare._dy,kSp=portraitPrepare._sp;
+ if(!kDx){kDx=portraitPrepare._dx=new Int8Array(25);kDy=portraitPrepare._dy=new Int8Array(25);kSp=portraitPrepare._sp=new Float32Array(25);let n=0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){kDx[n]=dx;kDy[n]=dy;kSp[n]=Math.exp(-(dx*dx+dy*dy)/(2*1.2*1.2));n++}}
  const count=w*h,background=new Uint8Array(count),lum=new Uint8Array(count),hist=new Uint32Array(256),mask=new Uint8Array(count);
  for(let p=0;p<count;p++){const i=p*4;lum[p]=(data[i]*77+data[i+1]*151+data[i+2]*28)>>8;if(data[i+3]<128)background[p]=1}
  if(removeBackground){
@@ -344,12 +377,9 @@ function portraitPrepare(data,w,h,removeBackground){
    border.forEach(visit);while(head<tail){const p=queue[head++],x=p%w;if(x)visit(p-1);if(x<w-1)visit(p+1);if(p>=w)visit(p-w);if(p<count-w)visit(p+w)}
   }
  }
- // Small bilateral kernel removes weak texture while retaining high-contrast eyes and glasses.
- const range=Float32Array.from({length:256},(_,i)=>Math.exp(-i*i/(2*24*24))),kernel=[];
- for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)kernel.push([dx,dy,Math.exp(-(dx*dx+dy*dy)/(2*1.2*1.2))]);
  const smooth=new Uint8Array(count);let used=0;
- for(let y=0;y<h;y++)for(let x=0;x<w;x++){const p=y*w+x;if(background[p])continue;let total=0,weight=0;
-  for(const [dx,dy,spatial] of kernel){const xx=x+dx,yy=y+dy;if(xx<0||xx>=w||yy<0||yy>=h)continue;const q=yy*w+xx;if(background[q])continue;const k=spatial*range[Math.abs(lum[q]-lum[p])];total+=lum[q]*k;weight+=k}
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){const p=y*w+x;if(background[p])continue;let total=0,weight=0;const lp=lum[p];
+  for(let k=0;k<25;k++){const xx=x+kDx[k],yy=y+kDy[k];if(xx<0||xx>=w||yy<0||yy>=h)continue;const q=yy*w+xx;if(background[q])continue;const wt=kSp[k]*range[Math.abs(lum[q]-lp)];total+=lum[q]*wt;weight+=wt}
   smooth[p]=Math.round(total/weight);hist[smooth[p]]++;mask[p]=1;used++;
  }
  const percentile=part=>{let n=0;for(let v=0;v<256;v++){n+=hist[v];if(n>=Math.max(1,used*part))return v}return 255};
@@ -383,9 +413,11 @@ function portraitColorPixels(data,tone,mask,w,h,retention){
   positions[n]=p;colors[n*3]=Math.max(0,Math.min(255,Math.round(v+(r-y)*keep)));colors[n*3+1]=Math.max(0,Math.min(255,Math.round(v+(g-y)*keep)));colors[n*3+2]=Math.max(0,Math.min(255,Math.round(v+(b-y)*keep)));n++;
  }
  const palette=portraitMedianPalette(colors,used),indices=new Uint8Array(mask.length);
+ const pr=new Uint8Array(16),pg=new Uint8Array(16),pb=new Uint8Array(16);
+ for(let i=1;i<16;i++){const c=palette[i];pr[i]=c>>16;pg[i]=(c>>8)&255;pb[i]=c&255}
  for(let n=0;n<used;n++){
   const r=colors[n*3],g=colors[n*3+1],b=colors[n*3+2];let best=1,bestDistance=Infinity;
-  for(let i=1;i<16;i++){const c=palette[i],dr=r-(c>>16),dg=g-((c>>8)&255),db=b-(c&255),distance=dr*dr+dg*dg+db*db;if(distance<bestDistance){best=i;bestDistance=distance}}
+  for(let i=1;i<16;i++){const dr=r-pr[i],dg=g-pg[i],db=b-pb[i],distance=dr*dr+dg*dg+db*db;if(distance<bestDistance){best=i;bestDistance=distance}}
   indices[positions[n]]=best;
  }
  return {indices,palette};
@@ -414,16 +446,19 @@ function portraitColor(packed,p){
  const c=packed[8+(index-1)*2]|(packed[9+(index-1)*2]<<8),r=(c>>11)&31,g=(c>>5)&63,b=c&31;
  return (Math.round(r*255/31)<<16)|(Math.round(g*255/63)<<8)|Math.round(b*255/31);
 }
-function previewPortrait(){if(!portrait)return;const packed=portraitPacked(),g=$('binc').getContext('2d'),o=g.createImageData(PORTRAIT.w,PORTRAIT.h);for(let p=0;p<PORTRAIT.w*PORTRAIT.h;p++){const color=portraitColor(packed,p),i=p*4;o.data[i]=color>>16;o.data[i+1]=(color>>8)&255;o.data[i+2]=color&255;o.data[i+3]=255}g.putImageData(o,0,0)}
+function previewPortrait(){if(typeof clearPreviewTimer==='function')clearPreviewTimer();$('binc')?.classList?.toggle('is-pending',false);if(!portrait)return;const packed=portraitPacked(),g=$('binc').getContext('2d'),o=g.createImageData(PORTRAIT.w,PORTRAIT.h);for(let p=0;p<PORTRAIT.w*PORTRAIT.h;p++){const color=portraitColor(packed,p),i=p*4;o.data[i]=color>>16;o.data[i+1]=(color>>8)&255;o.data[i+2]=color&255;o.data[i+3]=255}g.putImageData(o,0,0)}
 function renderPortraitStyles(){
  const box=$('portraitStyles');if(!box)return;
+ const hex=v=>'#'+v.toString(16).padStart(6,'0');
  box.replaceChildren();portraitStyleInputs=[];
  for(const style of portraitStyles){
-  const label=document.createElement('label'),input=document.createElement('input'),text=document.createElement('span');
+  const label=document.createElement('label'),input=document.createElement('input'),text=document.createElement('span'),dot=document.createElement('i'),name=document.createElement('b');
   input.type='radio';input.name='portraitStyle';input.value=String(style.id);input.id='portraitStyle'+style.id;
   input.checked=style.id===portraitStyle;
   input.onchange=()=>{if(input.checked)setPortraitStyle(style.id)};
-  text.textContent=style.label;
+  dot.style.background=style.id===0?'conic-gradient(#ff6b35,#fbbf24,#34d399,#38bdf8,#c084fc,#ff6b35)':`linear-gradient(135deg,${hex(style.palette[1])},${hex(style.palette[3])})`;
+  name.textContent=style.label;name.style.fontWeight='inherit';
+  text.appendChild(dot);text.appendChild(name);
   label.appendChild(input);label.appendChild(text);box.appendChild(label);portraitStyleInputs.push(input);
  }
 }
@@ -431,18 +466,39 @@ function setPortraitStyle(value){
  const id=Number(value),match=portraitStyles.find(style=>style.id===id);
  portraitStyle=match?match.id:0;
  for(const input of portraitStyleInputs)input.checked=Number(input.value)===portraitStyle;
+ $('portraitColorRow')?.classList?.toggle('is-muted',portraitStyle>0);
  previewPortrait();
 }
-$('portraitBrightness').oninput=previewPortrait;$('portraitColor').oninput=previewPortrait;$('portraitBackground').onchange=previewPortrait;
+$('portraitBrightness').oninput=()=>schedulePreview(80);$('portraitBrightness').onchange=previewPortrait;
+$('portraitColor').oninput=()=>schedulePreview(80);$('portraitColor').onchange=previewPortrait;
+$('portraitBackground').onchange=previewPortrait;
 async function imageFile(input){const file=input.files[0];if(!file)return null;if(!file.size)throw new Error('图片文件为空，请重新选择。');if(file.size>20*1024*1024)throw new Error('图片超过 20 MB，请选择较小的图片。');const url=URL.createObjectURL(file);let timer;imageLoading++;try{const img=new Image();await new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(new Error('读取图片超时，请将图片保存到手机本地后重试。')),15000);img.onload=resolve;img.onerror=()=>reject(new Error('无法读取图片，请换一张 JPEG 或 PNG 图片。'));img.src=url});if(!img.naturalWidth||!img.naturalHeight)throw new Error('图片尺寸无效，请重新选择。');return img}catch(e){URL.revokeObjectURL(url);throw e}finally{clearTimeout(timer);imageLoading--}}
-async function selectPortrait(input){say('avatarStatus','正在读取图片…');try{const img=await imageFile(input);if(!img){say('avatarStatus',portrait?'已保留之前选择的人像。':'未选择图片。');return}if(portrait)URL.revokeObjectURL(portrait.src);portrait=img;$('pv').src=img.src;base=Math.max(VP.w/img.naturalWidth,VP.h/img.naturalHeight);zoom=1;$('zm').value=100;syncStepSliders();ox=(VP.w-img.naturalWidth*base)/2;oy=(VP.h-img.naturalHeight*base)/2;clamp();previewPortrait();$('photoTools').hidden=false;say('avatarStatus','已选择，将在完成设置时保存。')}catch(e){input.value='';say('avatarStatus',e.message,true)}}
-$('zm').oninput=()=>{if(!portrait)return;const z=Number($('zm').value)/100;ox=VP.w/2-(VP.w/2-ox)*z/zoom;oy=VP.h/2-(VP.h/2-oy)*z/zoom;zoom=z;clamp();previewPortrait()};let drag=null;
-$('vp').onpointerdown=e=>{if(!portrait)return;drag={x:e.clientX,y:e.clientY,ox,oy};$('vp').setPointerCapture(e.pointerId)};$('vp').onpointermove=e=>{if(!drag)return;ox=drag.ox+e.clientX-drag.x;oy=drag.oy+e.clientY-drag.y;clamp()};$('vp').onpointerup=$('vp').onpointercancel=()=>{if(drag){drag=null;previewPortrait()}};
+function clearPreviewTimer(){if(previewTimer){clearTimeout(previewTimer);previewTimer=null}}
+function schedulePreview(delay){if(!portrait)return;clearPreviewTimer();$('binc')?.classList?.toggle('is-pending',true);previewTimer=setTimeout(()=>{previewTimer=null;previewPortrait()},delay)}
+function preparePortraitSource(img){
+ const maxDim=Math.max(img.naturalWidth,img.naturalHeight);
+ if(maxDim<=960){portraitSource=img;portraitSourceScale=1;return}
+ const scale=960/maxDim,w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale));
+ const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');
+ g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(img,0,0,w,h);
+ portraitSource=c;portraitSourceScale=w/img.naturalWidth;
+}
+async function selectPortrait(input){say('avatarStatus','正在读取图片…');try{const img=await imageFile(input);if(!img){say('avatarStatus',portrait?'已保留之前选择的人像。':'未选择图片。');return}if(portrait)URL.revokeObjectURL(portrait.src);portrait=img;preparePortraitSource(img);$('pv')._b=0;$('pv').src=img.src;base=Math.max(VP.w/img.naturalWidth,VP.h/img.naturalHeight);zoom=1;$('zm').value=100;syncStepSliders();ox=(VP.w-img.naturalWidth*base)/2;oy=(VP.h-img.naturalHeight*base)/2;clamp();previewPortrait();$('photoTools').hidden=false;say('avatarStatus','已选择，将在完成设置时保存。')}catch(e){input.value='';say('avatarStatus',e.message,true)}}
+function applyZoom(nextZoom,fx=VP.w/2,fy=VP.h/2){if(!portrait)return;const z=Math.max(1,Math.min(4,nextZoom));ox=fx-(fx-ox)*z/zoom;oy=fy-(fy-oy)*z/zoom;zoom=z;clamp()}
+$('zm').oninput=()=>{if(!portrait)return;applyZoom(Number($('zm').value)/100);schedulePreview(130)};
+$('zm').onchange=()=>{if(portrait)previewPortrait()};
+const vpPointers=new Map();let drag=null,pinch=null;
+function startPan(){if(vpPointers.size!==1){drag=null;return}const p=vpPointers.values().next().value;drag={x:p.x,y:p.y,ox,oy};pinch=null}
+function startPinch(){if(vpPointers.size<2){pinch=null;return}const [a,b]=[...vpPointers.values()],rect=$('vp').getBoundingClientRect?.()||{left:0,top:0};pinch={dist:Math.hypot(b.x-a.x,b.y-a.y)||1,zoom,ox,oy,mx:(a.x+b.x)/2-rect.left,my:(a.y+b.y)/2-rect.top};drag=null}
+$('vp').onpointerdown=e=>{if(!portrait)return;$('vp').setPointerCapture?.(e.pointerId);vpPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(vpPointers.size===1)startPan();else if(vpPointers.size===2)startPinch()};
+$('vp').onpointermove=e=>{if(!portrait||!vpPointers.has(e.pointerId))return;vpPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(vpPointers.size>=2&&pinch){const [a,b]=[...vpPointers.values()],rect=$('vp').getBoundingClientRect?.()||{left:0,top:0},mx=(a.x+b.x)/2-rect.left,my=(a.y+b.y)/2-rect.top,d=Math.hypot(b.x-a.x,b.y-a.y)||1,z=Math.max(1,Math.min(4,pinch.zoom*d/pinch.dist));ox=mx-(pinch.mx-pinch.ox)*z/pinch.zoom;oy=my-(pinch.my-pinch.oy)*z/pinch.zoom;zoom=z;clamp();$('zm').value=String(Math.round(zoom*10)*10);syncStepSliders();schedulePreview(130)}else if(drag){ox=drag.ox+e.clientX-drag.x;oy=drag.oy+e.clientY-drag.y;clamp()}};
+const vpEnd=e=>{if(!vpPointers.has(e.pointerId))return;vpPointers.delete(e.pointerId);if(vpPointers.size>=2)startPinch();else if(vpPointers.size===1){startPan();previewPortrait()}else if(drag||pinch){drag=null;pinch=null;previewPortrait()}};
+$('vp').onpointerup=vpEnd;$('vp').onpointercancel=vpEnd;
 function bindStepSlider(id){
  const range=$(id),num=$(id+'Value'),ticks=$(id+'Ticks'),min=Number(range.min),max=Number(range.max),step=Number(range.step)||1,segments=(max-min)/step;
  if(ticks&&ticks.replaceChildren&&segments>0){ticks.replaceChildren();for(let i=0;i<=segments;i++){const mark=document.createElement('i');mark.style.left=(i*100/segments)+'%';ticks.appendChild(mark)}}
  const paint=()=>{num.value=range.value};
- const apply=()=>{const raw=String(num.value).trim();if(!raw)return paint();let v=Number(raw);if(!Number.isFinite(v))return paint();const min=Number(range.min),max=Number(range.max),step=Number(range.step)||1;v=min+Math.round((v-min)/step)*step;v=Math.max(min,Math.min(max,v));if(String(v)!==range.value){range.value=String(v);range.oninput?.()}paint()};
+ const apply=()=>{const raw=String(num.value).trim();if(!raw)return paint();let v=Number(raw);if(!Number.isFinite(v))return paint();const min=Number(range.min),max=Number(range.max),step=Number(range.step)||1;v=min+Math.round((v-min)/step)*step;v=Math.max(min,Math.min(max,v));if(String(v)!==range.value){range.value=String(v);range.oninput?.();range.onchange?.()}paint()};
  num.onchange=apply;num.onblur=apply;
  const base=range.oninput;range.oninput=e=>{base?.call(range,e);paint()};
  paint();
