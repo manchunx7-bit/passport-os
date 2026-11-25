@@ -28,6 +28,11 @@ static const uint32_t s_palettes[UI_THEME_COUNT][UI_COLOR_COUNT] = {
         0xA4AFC0, 0x38E8E1, 0xFF747D, 0x10131A, 0xAAEE6D, 0xFFD45A,
         0xFF78CA, 0xFFB75E,
     },
+    [UI_THEME_STUDIO] = {
+        0x16171A, 0x212328, 0x2C3038, 0x3E434E, 0xF5F3EE,
+        0x9A9FA8, 0xFF6B35, 0xFF4D5E, 0x141210, 0x34D399, 0xFBBF24,
+        0x38BDF8, 0xC084FC,
+    },
 };
 
 static const uint32_t s_playful_dark[UI_COLOR_COUNT] = {
@@ -43,9 +48,11 @@ void ui_theme_set(ui_theme_t theme)
 
 ui_theme_t ui_theme_get(void) { return s_ui_theme; }
 bool ui_theme_is_classic(void) { return s_ui_theme == UI_THEME_CLASSIC; }
+bool ui_theme_is_studio(void) { return s_ui_theme == UI_THEME_STUDIO; }
 bool ui_theme_is_multicolor(void)
 {
-    return s_ui_theme == UI_THEME_PLAYFUL || s_ui_theme == UI_THEME_NEON;
+    return s_ui_theme == UI_THEME_PLAYFUL || s_ui_theme == UI_THEME_NEON ||
+           s_ui_theme == UI_THEME_STUDIO;
 }
 uint32_t ui_theme_color(ui_color_role_t role)
 {
@@ -76,6 +83,7 @@ uint32_t ui_theme_portrait_subject_color(uint8_t level)
         {0x484D43, 0x797D69, 0xB6B7A0, 0xEEE7D6},
         {0x374543, 0x637771, 0xADBFB1, 0xF1EEE6},
         {0x343C55, 0x657593, 0xB3C5D8, 0xF4F4F6},
+        {0x343740, 0x646978, 0xA8AEB8, 0xF5F3EE},
     };
     return colors[s_ui_theme][level > 3 ? 3 : level];
 }
@@ -85,8 +93,32 @@ const char *ui_theme_name(ui_theme_t theme)
         case UI_THEME_TRAVEL: return "旅行仪器";
         case UI_THEME_PLAYFUL: return "像素白";
         case UI_THEME_NEON: return "霓虹黑";
+        case UI_THEME_STUDIO: return "曜石工坊";
         default: return "经典绿";
     }
+}
+
+uint32_t ui_studio_meter_color(unsigned index, unsigned count, uint8_t value)
+{
+    if (value == 0) return ui_theme_color(UI_COLOR_BORDER);
+    const uint32_t c0 = ui_theme_color(UI_COLOR_SUCCESS);
+    const uint32_t c1 = ui_theme_color(UI_COLOR_SECONDARY);
+    const uint32_t c2 = ui_theme_color(UI_COLOR_TERTIARY);
+    if (count <= 1) return c1;
+    if (index >= count) index = count - 1;
+    const unsigned span = count - 1;
+    const unsigned pos = index * 2;
+    uint32_t a, b;
+    unsigned t;
+    if (pos <= span) {
+        a = c0; b = c1; t = pos;
+    } else {
+        a = c1; b = c2; t = pos - span;
+    }
+    const unsigned r = (((a >> 16) & 0xFF) * (span - t) + ((b >> 16) & 0xFF) * t + span / 2) / span;
+    const unsigned g = (((a >> 8)  & 0xFF) * (span - t) + ((b >> 8)  & 0xFF) * t + span / 2) / span;
+    const unsigned bl = ((a & 0xFF)        * (span - t) + (b & 0xFF)         * t + span / 2) / span;
+    return (r << 16) | (g << 8) | bl;
 }
 
 static void start_blink(lv_obj_t *eye);
@@ -219,7 +251,8 @@ lv_obj_t *ui_pixel_panel_create(lv_obj_t *parent, int x, int y, int w, int h,
 {
     lv_obj_t *panel = block(parent, x, y, w, h, color);
     lv_obj_set_style_border_color(panel, lv_color_hex(UI_BORDER), 0);
-    lv_obj_set_style_border_width(panel, ui_theme_is_classic() ? 1 : 0, 0);
+    lv_obj_set_style_border_width(panel, ui_theme_is_classic() || ui_theme_is_studio() ? 1 : 0, 0);
+    if (ui_theme_is_studio()) lv_obj_set_style_radius(panel, 6, 0);
     lv_obj_set_style_pad_all(panel, 7, 0);
     return panel;
 }
@@ -300,8 +333,9 @@ void ui_pixel_set_selected(lv_obj_t *panel, bool selected, bool enabled)
 {
     uint32_t color = selected && enabled ? UI_SURFACE_ALT : UI_SURFACE;
     lv_obj_set_style_bg_color(panel, lv_color_hex(color), 0);
+    const uint32_t active_border = ui_theme_is_studio() ? UI_ACCENT : UI_AMBER;
     lv_obj_set_style_border_color(panel,
-        lv_color_hex(selected && enabled ? UI_AMBER : UI_BORDER), 0);
+        lv_color_hex(selected && enabled ? active_border : UI_BORDER), 0);
 }
 
 // ==================== 2026-09-13 新增共享构件 ====================

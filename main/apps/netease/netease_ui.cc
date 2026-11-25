@@ -138,7 +138,7 @@ void render_rows(const Snapshot &v) {
         lv_obj_remove_flag(s_rows[r], LV_OBJ_FLAG_HIDDEN);
         const bool active = r == v.selected;
         ui_pixel_bg_color(s_rows[r], active ? UI_SURFACE_ALT : UI_SURFACE);
-        const uint32_t border = active ? UI_AMBER : UI_BORDER;
+        const uint32_t border = active ? (ui_theme_is_studio() ? UI_ACCENT : UI_AMBER) : UI_BORDER;
         if (!lv_color_eq(lv_obj_get_style_border_color(s_rows[r], LV_PART_MAIN), lv_color_hex(border)))
             lv_obj_set_style_border_color(s_rows[r], lv_color_hex(border), 0);
         shown_text(s_row_text[r], v.rows[r], r);
@@ -242,10 +242,14 @@ void draw_meter(lv_event_t *event) {
     lv_draw_rect_dsc_t ink;
     lv_draw_rect_dsc_init(&ink);
     ink.bg_opa = LV_OPA_COVER;
+    const bool studio = ui_theme_is_studio();
+    if (studio) ink.radius = 2;
     for (size_t i = 0; i < kMeterBars; ++i) {
         const uint8_t value = s_meter_value[i];
         const int height = 2 + value * 20 / 100;
-        ink.bg_color = lv_color_hex(value > 85 ? UI_RED : value > 62 ? UI_AMBER : value ? UI_GRASS : UI_BORDER);
+        ink.bg_color = lv_color_hex(studio
+            ? ui_studio_meter_color(static_cast<unsigned>(i), static_cast<unsigned>(kMeterBars), value)
+            : (value > 85 ? UI_RED : value > 62 ? UI_AMBER : value ? UI_GRASS : UI_BORDER));
         const int x = area.x1 + 2 + int(i) * 12;
         const lv_area_t bar = {x, area.y2 - height + 1, x + 7, area.y2};
         lv_draw_rect(lv_event_get_layer(event), &ink, &bar);
@@ -362,9 +366,11 @@ void ui_create(const Lyrics *lyrics) {
 
     s_list_group = group(s_screen);
     s_sub = text(s_list_group, 12, 32, 216, 20, UI_TEXT_DIM, LV_TEXT_ALIGN_LEFT);
+    const bool studio = ui_theme_is_studio();
     for (size_t r = 0; r < kVisibleRows; ++r) {
         s_rows[r] = box(s_list_group, 12, kRowY + static_cast<int>(r) * kRowStep, 216, kRowH, UI_SURFACE);
         lv_obj_set_style_border_width(s_rows[r], 1, 0);
+        if (studio) lv_obj_set_style_radius(s_rows[r], 6, 0);
         s_row_text[r] = ui_pixel_label(s_rows[r], "", &buddy_font_16, UI_TEXT_DIM);
         lv_obj_set_pos(s_row_text[r], 8, 3);
         lv_obj_set_size(s_row_text[r], 200, 20);
@@ -386,7 +392,8 @@ void ui_create(const Lyrics *lyrics) {
     s_artist = text(s_player_group, 12, 64, 216, 20, UI_TEXT_DIM, LV_TEXT_ALIGN_CENTER);
     box(s_player_group, 108, 88, 24, 1, UI_BORDER);
     s_lyric[0] = text(s_player_group, 12, 100, 216, 20, UI_TEXT_DIM, LV_TEXT_ALIGN_CENTER);
-    box(s_player_group, 12, 124, 216, 44, UI_SURFACE);
+    lv_obj_t *lyric_box = box(s_player_group, 12, 124, 216, 44, UI_SURFACE);
+    if (studio) lv_obj_set_style_radius(lyric_box, 6, 0);
     s_lyric[1] = text(s_player_group, 18, 126, 204, 40, UI_TEXT, LV_TEXT_ALIGN_CENTER, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_height(s_lyric[1], LV_SIZE_CONTENT);
     lv_obj_set_style_max_height(s_lyric[1], 40, 0);

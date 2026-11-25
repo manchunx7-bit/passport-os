@@ -1,4 +1,5 @@
-// Speaker-friendly output stage for NetEase music (mono PCM16, in place).
+// Speaker-friendly output stage shared by NetEase, radio and Xiaozhi playback
+// (mono PCM16, in place).
 //
 // Commercial masters peak near 0 dBFS; at master volume 100 the codec curve
 // adds +6 dB (bsp_audio_volume.c), which clips into harsh distortion. A tiny
@@ -10,8 +11,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-
-namespace netease {
 
 class SpeakerDsp {
 public:
@@ -76,5 +75,3 @@ private:
     int32_t gain_ = 32768;
     int32_t ceiling_ = 32767;
 };
-
-}  // namespace netease

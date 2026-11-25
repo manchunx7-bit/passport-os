@@ -9,7 +9,7 @@ source = (root / 'main/apps/home/app_home.cc').read_text()
 begin = source.index('struct WeatherSchedule {')
 end = source.index('WeatherSchedule s_weather_schedule;', begin)
 schedule = source[begin:end]
-constants = '\n'.join(re.findall(r'constexpr int64_t k(?:Weather(?:FirstDelay|Period|Retry)|AirPeriod)Ms = \d+;', source))
+constants = '\n'.join(re.findall(r'constexpr int(?:64_t)? k(?:Weather(?:FirstDelay|Period|QuickRetry|Retry)Ms|WeatherQuickRetries|AirPeriodMs) = \d+;', source))
 code = r'''
 #include "apps/home/home_profile.h"
 #include <cassert>
@@ -45,11 +45,25 @@ int main() {
     retry.begin(WeatherSchedule::Both,15000,city);
     retry.finish(WeatherSchedule::Weather,20000,ESP_FAIL);
     retry.finish(WeatherSchedule::Air,21000,ESP_OK);
-    assert(retry.due(139999,130000,false,city)==0);
-    assert(retry.due(140000,130000,false,city)==WeatherSchedule::Weather);
-    retry.begin(WeatherSchedule::Weather,140000,city);
-    retry.finish(WeatherSchedule::Weather,145000,ESP_OK);
-    assert(retry.due(155000,150000,false,city)==0);
+    // The first two failures retry after 30 s so a short screen-on visit recovers.
+    assert(retry.due(49999,40000,false,city)==0);
+    assert(retry.due(50000,40000,false,city)==WeatherSchedule::Weather);
+    retry.begin(WeatherSchedule::Weather,50000,city);
+    retry.finish(WeatherSchedule::Weather,55000,ESP_FAIL);
+    assert(retry.due(84999,80000,false,city)==0);
+    assert(retry.due(85000,80000,false,city)==WeatherSchedule::Weather);
+    // Later failures fall back to the 2-minute retry ceiling.
+    retry.begin(WeatherSchedule::Weather,85000,city);
+    retry.finish(WeatherSchedule::Weather,90000,ESP_FAIL);
+    assert(retry.due(209999,200000,false,city)==0);
+    assert(retry.due(210000,200000,false,city)==WeatherSchedule::Weather);
+    retry.begin(WeatherSchedule::Weather,210000,city);
+    retry.finish(WeatherSchedule::Weather,215000,ESP_OK);
+    assert(retry.weather_failures==0);
+    assert(retry.due(225000,220000,false,city)==0);
+    // Success resets the quick retry budget.
+    retry.finish(WeatherSchedule::Weather,1000000,ESP_FAIL);
+    assert(retry.due(1030000,1020000,false,city)==WeatherSchedule::Weather);
     // AQ failure does not introduce a new two-minute network retry cycle.
     retry.finish(WeatherSchedule::Air,150000,ESP_FAIL);
     assert(retry.due(270000,260000,false,city)==0);
@@ -59,7 +73,7 @@ int main() {
     assert(interrupted.due(16000,16000,false,city)==WeatherSchedule::Both);
     interrupted.finish(WeatherSchedule::Weather,17000,ESP_OK);
     assert(interrupted.due(18000,18000,false,city)==WeatherSchedule::Air);
-    puts("Home schedule: reuse across visits, 15-minute weather / 30-minute AQ expiry, bounded weather retry, AQ request ceiling, manual/location refresh, cancelled/partial work PASS");
+    puts("Home schedule: reuse across visits, 15-minute weather / 30-minute AQ expiry, quick-then-bounded weather retry, AQ request ceiling, manual/location refresh, cancelled/partial work PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='passport-weather-schedule-') as temporary:

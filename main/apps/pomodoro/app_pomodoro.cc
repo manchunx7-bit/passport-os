@@ -7,6 +7,7 @@
 #include "bsp_battery.h"
 #include "app_fonts.h"
 #include "ui_pixel.h"
+#include "ui/status_wifi.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "esp_system.h"
@@ -25,6 +26,7 @@ lv_obj_t *s_screen, *s_phase, *s_time, *s_status, *s_count, *s_primary;
 lv_obj_t *s_progress, *s_dots[4], *s_notice;
 lv_timer_t *s_timer;
 ui_pixel_battery_t s_battery{};
+lv_obj_t *s_wifi_bars[3] = {nullptr, nullptr, nullptr};
 uint64_t s_battery_updated_us, s_notice_until_us;
 bool s_reset_confirm;
 
@@ -111,6 +113,7 @@ void refresh() {
     ui_pixel_bg_color(s_progress, accent);
     if (!s_battery_updated_us || now - s_battery_updated_us >= 5000000ULL) {
         ui_pixel_battery_set(&s_battery, bsp_battery_soc());
+        ui_status_wifi_refresh(s_wifi_bars);
         s_battery_updated_us = now;
     }
 }
@@ -128,8 +131,9 @@ void start() {
     s_screen = lv_obj_create(nullptr);
     ui_pixel_background(s_screen);
     lv_obj_t *top = ui_pixel_top_bar(s_screen);
+    ui_pixel_wifi_bars_create(top, UI_STATUS_WIFI_X, 18, s_wifi_bars);
     lv_obj_t *title = ui_pixel_label(top, "番茄时钟", &buddy_font_16, UI_TEXT);
-    lv_obj_align(title, LV_ALIGN_LEFT_MID, 12, 0);
+    lv_obj_align(title, LV_ALIGN_LEFT_MID, 42, 0);
     s_battery = ui_pixel_battery_create(top, UI_STATUS_BATTERY_X, 6, UI_TEXT, &lv_font_montserrat_14);
     s_phase = label("", &pomodoro_font_20, UI_ACCENT, 12, 49, 216, 28);
     s_time = label("", &pomodoro_digits_48, UI_TEXT, 12, 90, 216, 62);
@@ -159,6 +163,7 @@ void stop() {
     if (s_screen) { lv_obj_delete(s_screen); s_screen = nullptr; }
     s_phase = s_time = s_status = s_count = s_primary = s_progress = nullptr;
     for (auto &dot : s_dots) dot = nullptr;
+    for (auto &bar : s_wifi_bars) bar = nullptr;
     s_battery = {};
     s_reset_confirm = false;
     ESP_LOGI(kTag, "UI released; status=%u remaining=%u completed=%u", s_clock.status,

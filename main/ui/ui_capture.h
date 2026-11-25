@@ -21,6 +21,13 @@ extern "C" {
  */
 void ui_capture_dump_hex(void);
 
+/**
+ * 渲染性能探针(串口 'F',调试用途)。调用方必须已持有 bsp_lvgl_lock。
+ * ① 离屏按 12 行横带纯渲染当前屏(不刷屏) ② 整屏重绘并真实刷屏,
+ * 分别记录 flush_cb 与等待 DMA 的耗时。各跑 3 次打印到日志。
+ */
+void ui_capture_perf_probe(void);
+
 #ifdef __cplusplus
 }
 #endif

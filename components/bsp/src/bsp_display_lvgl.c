@@ -72,4 +72,11 @@ lv_display_t *bsp_lvgl_init(void) {
 }
 
 bool bsp_lvgl_lock(int timeout_ms) { return lvgl_port_lock(timeout_ms); }
-void bsp_lvgl_unlock(void)         { lvgl_port_unlock(); }
+void bsp_lvgl_unlock(void) {
+    lvgl_port_unlock();
+    // With no due timer the port task sleeps up to task_max_sleep_ms (500 ms),
+    // and only invalidations wake it. A timer created or re-armed from another
+    // task (e.g. Tetris builds its UI in the first tick) then waited up to
+    // ~0.5 s: game -> Tetris measured 757 ms vs 312 ms. Wake it explicitly.
+    lvgl_port_task_wake(LVGL_PORT_EVENT_USER, NULL);
+}

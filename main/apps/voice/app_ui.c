@@ -76,6 +76,6 @@ void app_ui_render(const app_ui_snapshot_t *snap){
     lv_obj_set_y(s_state,channel?100:recording?197:188);
     const char *state=snap->init_failed?"语音启动失败":!snap->link_up?"等待电脑连接":channel?"麦克风未就绪":recording?"正在传音":snap->toast[0]?snap->toast:snap->net_busy?"网络不稳":"可以说话了";
     ui_pixel_label_set_text(s_state,state);ui_pixel_text_color(s_state,channel?UI_DANGER:!ready||snap->net_busy?UI_WARNING:UI_TEXT);
-    ui_pixel_label_set_text(s_help,snap->init_failed?"长按确定返回后重试":!snap->link_up?(snap->elapsed_ms>=10000?"需与电脑在同一 Wi-Fi":"启动电脑端转发器"):recording?"松开上键结束":snap->net_busy?"靠近路由器后重试":"对着设备麦克风说话");
+    ui_pixel_label_set_text(s_help,snap->init_failed?"长按确定返回后重试":!snap->link_up?(snap->elapsed_ms>=10000?"需与电脑在同一 Wi-Fi":"启动电脑端转发器"):recording?(snap->pc_ptt?"松开电脑热键结束":"松开上键结束"):snap->net_busy?"靠近路由器后重试":"按住上键或电脑热键说话");
     ui_pixel_label_set_text(s_keys[1],recording?"松开结束":"按住说话");
 }

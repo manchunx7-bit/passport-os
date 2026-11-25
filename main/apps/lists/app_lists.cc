@@ -5,6 +5,7 @@
 #include "bsp_battery.h"
 #include "app_fonts.h"
 #include "ui_pixel.h"
+#include "ui/status_wifi.h"
 #include <cstdio>
 #include <new>
 
@@ -13,6 +14,7 @@ struct View {Summary lists[kLists]{};List current{};size_t count=0,selected=0;ui
 View *view;
 lv_obj_t *screen,*heading,*body,*footer,*lines[3];lv_timer_t *timer;
 ui_pixel_battery_t battery{};
+lv_obj_t *wifi_bars[3];
 const char *message=nullptr;
 lv_obj_t *label(const char *text,int x,int y,int w,int h,uint32_t color){
     auto *o=ui_pixel_label(screen,text,&buddy_font_16,color);lv_obj_set_pos(o,x,y);lv_obj_set_size(o,w,h);lv_label_set_long_mode(o,LV_LABEL_LONG_WRAP);return o;
@@ -27,7 +29,7 @@ void refresh(){
         if(!v.list_id&&!catalog(v.lists,&v.count,&error))message=error;
         v.revision=revision();
     }
-    ui_pixel_battery_set(&battery,bsp_battery_soc());
+    ui_pixel_battery_set(&battery,bsp_battery_soc());ui_status_wifi_refresh(wifi_bars);
     for(auto *line:lines)lv_obj_add_flag(line,LV_OBJ_FLAG_HIDDEN);
     const size_t count=v.list_id?v.current.count:v.count;
     if(v.selected>=count)v.selected=count?count-1:0;
@@ -60,7 +62,8 @@ void start(){
     if(!bsp_lvgl_lock(1000))return;
     view=new(std::nothrow) View;message=nullptr;
     screen=lv_obj_create(nullptr);ui_pixel_background(screen);auto *top=ui_pixel_top_bar(screen);
-    auto *name=ui_pixel_label(top,"文字清单",&buddy_font_16,UI_TEXT);lv_obj_align(name,LV_ALIGN_LEFT_MID,12,0);
+    ui_pixel_wifi_bars_create(top,UI_STATUS_WIFI_X,18,wifi_bars);
+    auto *name=ui_pixel_label(top,"文字清单",&buddy_font_16,UI_TEXT);lv_obj_align(name,LV_ALIGN_LEFT_MID,42,0);
     battery=ui_pixel_battery_create(top,UI_STATUS_BATTERY_X,6,UI_TEXT,&lv_font_montserrat_14);
     heading=label("",12,42,216,26,UI_ACCENT);body=label("",12,80,216,168,UI_TEXT);
     for(unsigned i=0;i<3;++i){lines[i]=label("",12,76+i*60,216,54,UI_TEXT);lv_label_set_long_mode(lines[i],LV_LABEL_LONG_DOT);
@@ -68,7 +71,7 @@ void start(){
     footer=ui_pixel_footer(screen,"","",&buddy_font_16);lv_obj_set_height(footer,42);lv_label_set_long_mode(footer,LV_LABEL_LONG_WRAP);
     lv_screen_load(screen);refresh();timer=lv_timer_create([](lv_timer_t*){refresh();},1000,nullptr);bsp_lvgl_unlock();
 }
-void stop(){if(!bsp_lvgl_lock(1000))return;if(timer){lv_timer_delete(timer);timer=nullptr;}if(screen){lv_obj_delete(screen);screen=nullptr;}delete view;view=nullptr;bsp_lvgl_unlock();}
+void stop(){if(!bsp_lvgl_lock(1000))return;if(timer){lv_timer_delete(timer);timer=nullptr;}if(screen){lv_obj_delete(screen);screen=nullptr;}for(auto *&bar:wifi_bars)bar=nullptr;delete view;view=nullptr;bsp_lvgl_unlock();}
 bool back(){if(!bsp_lvgl_lock(500))return true;bool handled=view&&(view->list_id||view->item_id);
     if(handled){if(view->item_id){view->item_id=0;view->deleting=false;}else{view->list_id=0;view->selected=0;}view->revision=UINT32_MAX;message=nullptr;refresh();}bsp_lvgl_unlock();return handled;}
 void key(uint8_t btn,app_btn_event_t event,uint16_t){

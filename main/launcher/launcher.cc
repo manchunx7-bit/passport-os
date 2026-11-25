@@ -45,6 +45,12 @@ size_t s_selected_index;
 
 void draw_catalogue_stage(lv_event_t *event) {
     pixel_scene::Ink ink(event);
+    if (ui_theme_is_studio()) {
+        ink.rbox(0, 0, 216, 146, UI_SURFACE, 10, UI_BORDER, 1);
+        ink.rbox(14, 12, 24, 4, s_icon_color ? s_icon_color : UI_ACCENT, 2);
+        ink.rbox(74, 28, 68, 68, UI_SURFACE_ALT, 10);
+        return;
+    }
     // A single ticket: notched corners and one accent tab. The page number in
     // the corner is the only position cue, so no brackets or pager dots.
     ink.box(0, 0, 216, 146, UI_SURFACE);
@@ -157,6 +163,44 @@ constexpr IconGlyph kIconGlyphs[] = {
         "#.######..#####.#",
         "#...............#",
         "#################",
+        ".................",
+        ".................",
+    }},
+    {APP_ID_PODCAST, {  // broadcast waves and stand
+        ".................",
+        ".....#######.....",
+        "...##.......##...",
+        "..#...........#..",
+        ".#....#####....#.",
+        ".#...#.....#...#.",
+        ".#..#.......#..#.",
+        ".#..#..###..#..#.",
+        ".#..#..#.#..#..#.",
+        ".#..#..###..#..#.",
+        ".#...#.....#...#.",
+        "..#.....#.....#..",
+        "...#....#....#...",
+        "........#........",
+        "........#........",
+        ".....#######.....",
+        ".................",
+    }},
+    {APP_ID_AUDIOBOOK, {  // open book
+        ".................",
+        ".................",
+        "..######.######..",
+        ".#......#......#.",
+        ".#......#......#.",
+        ".#..###.#.###..#.",
+        ".#......#......#.",
+        ".#..###.#.###..#.",
+        ".#......#......#.",
+        ".#..###.#.###..#.",
+        ".#......#......#.",
+        ".#......#......#.",
+        ".#......#......#.",
+        "..######.######..",
+        "........#........",
         ".................",
         ".................",
     }},
@@ -405,12 +449,22 @@ void update_card_content() {
     lv_label_set_text_fmt(s_page_number, "%02u / %02u", (unsigned)s_selected_index + 1,
                           (unsigned)app_registry_get_count());
     uint32_t color = kPhos;
-    if (ui_theme_is_multicolor()) {
+    if (ui_theme_is_studio()) {
+        switch (app->id) {
+            case APP_ID_XIAOZHI: case APP_ID_MUSE: color = UI_ACCENT; break;
+            case APP_ID_RADIO: case APP_ID_VOICE: case APP_ID_TETRIS: color = UI_SECONDARY; break;
+            case APP_ID_AUDIOBOOK: case APP_ID_GAME: color = UI_TERTIARY; break;
+            case APP_ID_PODCAST: case APP_ID_REMINDERS: color = UI_WARNING; break;
+            case APP_ID_NETEASE: case APP_ID_POMODORO: color = UI_DANGER; break;
+            case APP_ID_STOPWATCH: case APP_ID_LISTS: case APP_ID_SOUND_JUMP: color = UI_SUCCESS; break;
+            default: color = UI_TEXT; break;
+        }
+    } else if (ui_theme_is_multicolor()) {
         switch (app->id) {
             case APP_ID_RADIO: case APP_ID_GAME: case APP_ID_POMODORO: color = UI_TERTIARY; break;
             case APP_ID_VOICE: case APP_ID_TETRIS: color = UI_SECONDARY; break;
             case APP_ID_XIAOZHI: case APP_ID_STOPWATCH: case APP_ID_LISTS: color = UI_SUCCESS; break;
-            case APP_ID_REMINDERS: color = UI_WARNING; break;
+            case APP_ID_REMINDERS: case APP_ID_AUDIOBOOK: color = UI_WARNING; break;
             case APP_ID_NETEASE: color = UI_DANGER; break;
             default: break;
         }
@@ -488,6 +542,7 @@ void launcher_ui_init(void) {
     lv_obj_add_event_cb(s_previous, draw_neighbour_chevron, LV_EVENT_DRAW_MAIN_END, s_previous);
     lv_obj_add_event_cb(s_next, draw_neighbour_chevron, LV_EVENT_DRAW_MAIN_END, nullptr);
     s_card = block(s_screen, 12, 84, 216, 146, kCardBg);
+    if (ui_theme_is_studio()) lv_obj_set_style_bg_opa(s_card, LV_OPA_TRANSP, 0);
     lv_obj_add_event_cb(s_card, draw_catalogue_stage, LV_EVENT_DRAW_MAIN, nullptr);
     s_page_number = ui_pixel_label(s_card, "", &lv_font_montserrat_14, UI_TEXT_DIM);
     lv_obj_set_pos(s_page_number, 140, 6);

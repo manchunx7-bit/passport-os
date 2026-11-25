@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-set(PROJECT_VER "0.2.0-rc.59")
+set(PROJECT_VER "0.2.0-rc.61")
 option(PASSPORT_RADIO_HLS_TEST "Use curated HLS/global radio test stations" OFF)
 option(PASSPORT_PUBLIC_RELEASE "Build with distribution-safe defaults and no personal configuration" OFF)
 option(PASSPORT_MUSE_USE_JOLLYBOT "Build Muse with the official Jollybot artwork" ON)
@@ -11,6 +11,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # CMake would split the definition; the empty block ends the statement.
 idf_build_set_property(COMPILE_DEFINITIONS "LV_ASSERT_HANDLER=while((__builtin_trap(),1)){}" APPEND)
 project(passport-os)
+include(tools/esp_tls_workaround.cmake)
 
 # These are memory-safety requirements, not optional tuning. A generated root
 # sdkconfig can silently retain old values after sdkconfig.defaults changes;

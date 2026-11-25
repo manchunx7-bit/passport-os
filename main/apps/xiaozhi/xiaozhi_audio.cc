@@ -3,6 +3,7 @@
 #include "apps/xiaozhi/xiaozhi_level.h"
 #include "bsp_audio.h"
 #include "audio_workspace.h"
+#include "speaker_dsp.h"
 #include "encoder/impl/esp_opus_enc.h"
 #include <esp_log.h>
 #include <esp_heap_caps.h>
@@ -34,12 +35,11 @@ constexpr int kBitsPerSample = 16;
 constexpr uint32_t kWorkIdleTimeoutMs = 1500;
 constexpr uint32_t kPlaybackDrainTimeoutMs = 2000;
 constexpr uint32_t kPlaybackAbortTimeoutMs = 800;
-constexpr uint32_t kPlaybackEnqueueWaitMs = 300;
+constexpr uint32_t kPlaybackEnqueueWaitMs = 1000;
 
-// 小智的 TTS 包由 WebSocket 突发下发。没有预缓冲时，网络任务稍有抖动，60ms
-// PCM 播完后 I2S 就会短暂断粮，听起来像连续的电流爆音。先积累 3 帧（约 180ms）
-// 再开播；若中途耗尽，也重新积累，宁可有很短的停顿，不把断续噪声送进功放。
-constexpr size_t kPlaybackPrebufferFrames = 3;
+// 小智的 TTS 包由 WebSocket 突发下发。先积累 4 帧（约 240ms）再开播，
+// 降低单核调度与 Wi-Fi 抖动造成的短暂断流概率。
+constexpr size_t kPlaybackPrebufferFrames = 4;
 
 // TTS follows the user's master volume without a hidden 70% ceiling. Recording
 // and idle paths still request 0%, which the BSP now applies as a real mute.
@@ -268,7 +268,7 @@ esp_err_t AudioService::Init() {
     work_ = Work::Idle;
     // Only the small rings remain deferred until TLS hello. PCM/Opus scratch
     // stays shared and the proven 22 KiB audio stack is unchanged.
-    worker_task_ = xTaskCreateStatic(WorkerEntry, "xzg_audio", kWorkerStack, this, 5,
+    worker_task_ = xTaskCreateStatic(WorkerEntry, "xzg_audio", kWorkerStack, this, 6,
                                       worker_stack_, &worker_tcb_);
     if (worker_task_ == nullptr) return fail_init();
     ESP_LOGI(TAG, "Audio service ready: shared scratch, stack=%u free=%u largest=%u",
@@ -779,13 +779,17 @@ void AudioService::AbortPlayback() {
 void AudioService::PlaySection() {
     bool primed = false;
     bool format_logged = false;
-    uint32_t starve_ticks = 0;
+    TickType_t starved_since = 0;
+    // Same high-pass + limiter as music: the reply volume is the master
+    // volume, and its +6 dB top step would otherwise clip loud TTS peaks.
+    SpeakerDsp dsp;
     while (!play_stop_ && !s_cancel_requested.load()) {
         if (!primed) {
             const size_t queued = RingCount(play_ring_);
             if (queued == 0 && play_drain_) break;
             if (!play_drain_ && queued < kPlaybackPrebufferFrames) {
-                vTaskDelay(pdMS_TO_TICKS(5));
+                if (work_signal_) xSemaphoreTake(work_signal_, pdMS_TO_TICKS(5));
+                else vTaskDelay(pdMS_TO_TICKS(5));
                 continue;
             }
             primed = queued > 0;
@@ -799,23 +803,26 @@ void AudioService::PlaySection() {
         if (got == 0) {
             // 收到软停且缓冲已排空 → 正常收尾（尾音已全部写进 codec）
             if (play_drain_ && !HasPendingPlayback()) break;
-            vTaskDelay(pdMS_TO_TICKS(5));
-            starve_ticks += 5;
-            // 仅当严重断流（超过 200ms 无任何数据）时才重新标记未预缓冲，
-            // 避免日常网络微抖动反复重置预缓冲，导致底层 DMA 播空而产生爆音。
-            if (starve_ticks >= 200) {
+            const TickType_t now_ticks = xTaskGetTickCount();
+            if (!starved_since) starved_since = now_ticks ? now_ticks : 1;
+            // 超过 500ms 无新帧才重进预缓冲，避免句间短停顿触发二次重攒延迟。
+            if (now_ticks - starved_since >= pdMS_TO_TICKS(500)) {
                 primed = false;
-                starve_ticks = 0;
+                starved_since = 0;
             }
+            if (work_signal_) xSemaphoreTake(work_signal_, pdMS_TO_TICKS(5));
+            else vTaskDelay(pdMS_TO_TICKS(5));
             continue;
         }
-        starve_ticks = 0;
+        starved_since = 0;
 
         const int frames = opus_decode(static_cast<OpusDecoder *>(opus_dec_handle_),
             opus_scratch_, static_cast<int32_t>(got), reinterpret_cast<int16_t *>(pcm_scratch_),
             kMaxPcmFrameBytes / sizeof(int16_t), 0);
         if (frames > 0 && !play_stop_) {
             const size_t bytes = static_cast<size_t>(frames) * sizeof(int16_t);
+            dsp.configure(static_cast<uint32_t>(playback_rate_), bsp_audio_get_master_volume());
+            dsp.process(reinterpret_cast<int16_t *>(pcm_scratch_), static_cast<size_t>(frames));
             if (!format_logged) {
                 ESP_LOGI(TAG, "Decoded PCM frame=%u bytes, I2S direct write", (unsigned)bytes);
                 format_logged = true;

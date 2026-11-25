@@ -15,6 +15,12 @@ struct Pen {
     lv_layer_t *layer;
     int32_t ox, oy;
 
+    // Each 12-row refresh band replays the face; skip shapes outside it
+    // rather than allocating draw tasks LVGL would discard.
+    bool visible(const lv_area_t &a) const {
+        const lv_area_t &clip = layer->_clip_area;
+        return a.x2 >= clip.x1 && a.x1 <= clip.x2 && a.y2 >= clip.y1 && a.y1 <= clip.y2;
+    }
     void rect(int x, int y, int w, int h, uint32_t color, int radius = 0, lv_opa_t opa = LV_OPA_COVER) {
         if (w <= 0 || h <= 0) return;
         lv_draw_rect_dsc_t d;
@@ -23,7 +29,7 @@ struct Pen {
         d.bg_opa = opa;
         d.radius = radius;
         const lv_area_t a{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
-        lv_draw_rect(layer, &d, &a);
+        if (visible(a)) lv_draw_rect(layer, &d, &a);
     }
     void panel(int x, int y, int w, int h, uint32_t fill, uint32_t edge, int radius, int border) {
         lv_draw_rect_dsc_t d;
@@ -35,7 +41,7 @@ struct Pen {
         d.border_opa = LV_OPA_COVER;
         d.radius = radius;
         const lv_area_t a{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
-        lv_draw_rect(layer, &d, &a);
+        if (visible(a)) lv_draw_rect(layer, &d, &a);
     }
     void ring(int x, int y, int w, int h, uint32_t color, int radius, int width) {
         lv_draw_rect_dsc_t d;
@@ -46,7 +52,7 @@ struct Pen {
         d.border_opa = LV_OPA_COVER;
         d.radius = radius;
         const lv_area_t a{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
-        lv_draw_rect(layer, &d, &a);
+        if (visible(a)) lv_draw_rect(layer, &d, &a);
     }
     // Angles: 0 = 3 o'clock, 90 = 6 o'clock, drawn clockwise.
     void arc(int cx, int cy, int radius, int width, int start, int end, uint32_t color,
@@ -448,8 +454,10 @@ void draw_big(lv_layer_t *layer, const lv_area_t &area, const Pose &p, const Pal
     // rest as quiet dots; it fits the existing host without stealing text space.
     for (int i = 0; i < kWaveBars; ++i) {
         const int height = 2 + (p.bars[i] * 12 + 50) / 100;
+        const uint32_t active_col = (i % 3 == 1 && c.wave_mid) ? c.wave_mid
+                                  : (i % 3 == 2 && c.wave_alt) ? c.wave_alt : c.eye;
         pen.rect(kCx - 38 + i * 6, 103 - height / 2, 4, height,
-                 p.bars[i] ? c.eye : c.edge, 2, p.bars[i] ? LV_OPA_COVER : LV_OPA_50);
+                 p.bars[i] ? active_col : c.edge, 2, p.bars[i] ? LV_OPA_COVER : LV_OPA_50);
     }
 
     // Antenna, then ears, so the head overlaps their roots.

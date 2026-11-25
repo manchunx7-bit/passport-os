@@ -134,6 +134,14 @@ int64_t s_cfg_fetched_ms = 0;
 // 省掉一次 HTTPS/TLS 握手。用它连失败一次就回到重新拉 OTA。
 bool s_cfg_carried = false;
 int s_connect_failures = 0;
+bool s_wifi_perf = false;
+
+void set_wifi_active_turn(bool active) {
+    if (active == s_wifi_perf) return;
+    s_wifi_perf = active;
+    WifiManager::GetInstance().SetPowerSaveLevel(
+        active ? WifiPowerSaveLevel::PERFORMANCE : WifiPowerSaveLevel::BALANCED);
+}
 
 int64_t now_ms() { return esp_timer_get_time() / 1000; }
 
@@ -181,6 +189,7 @@ void clear_timers() {
 void on_state_changed(State st) {
     State old = s_cur_state;
     s_cur_state = st;
+    set_wifi_active_turn(st == State::Listening || st == State::Thinking || st == State::Speaking);
     // TTS stop can arrive with seconds of buffered speech still playing. Keep
     // the speaking face/waveform until the existing bounded drain finishes.
     if (old == State::Speaking && st != State::Speaking) {
@@ -537,6 +546,7 @@ void do_stop_app() {
              (unsigned)esp_get_free_heap_size(),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 
+    set_wifi_active_turn(false);
     s_conversation_active = false;
     s_listen_after_connect = false;
     s_conversation_requested = false;
@@ -938,6 +948,7 @@ void xiaozhi_app_start(void) {
     s_audio_recovery_required = false;
     s_retry_reason.clear();
     s_connect_failures = 0;
+    s_wifi_perf = false;
 
     ESP_LOGI(TAG, "Starting Xiaozhi app...");
     s_control_running.store(true);

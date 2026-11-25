@@ -28,6 +28,9 @@ namespace {
 #define kRedAccent (UI_RED)
 
 lv_obj_t *s_screen = nullptr;
+lv_obj_t *s_header = nullptr;
+lv_obj_t *s_title_label = nullptr;
+lv_obj_t *s_top_bar = nullptr;
 lv_obj_t *s_status_badge = nullptr;
 lv_obj_t *s_status_label = nullptr;
 lv_obj_t *s_msg_container = nullptr;
@@ -91,8 +94,12 @@ face::Palette face_palette() {
     p.eye = s_face_state == State::Error ? UI_DANGER : UI_ACCENT;
     p.glint = classic ? UI_TEXT : 0xFFFFFF;
     p.blush = classic ? UI_ACCENT : theme == UI_THEME_NEON ? UI_SECONDARY : UI_DANGER;
-    p.tear = classic ? UI_TEXT : theme == UI_THEME_PLAYFUL ? UI_SECONDARY : 0x8FC7EF;
+    p.tear = classic ? UI_TEXT : (theme == UI_THEME_PLAYFUL || theme == UI_THEME_STUDIO) ? UI_SECONDARY : 0x8FC7EF;
     p.warn = UI_WARNING;
+    if (theme == UI_THEME_STUDIO) {
+        p.wave_mid = UI_SECONDARY;
+        p.wave_alt = UI_SUCCESS;
+    }
     return p;
 }
 
@@ -151,6 +158,14 @@ bool companion_needed() {
 }
 
 void conversation_layout() {
+    if (s_user_text.empty() && s_ai_reply_buffer.empty()) {
+        lv_obj_set_flex_align(s_msg_container, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                             LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_text_align(s_ai_text_label, LV_TEXT_ALIGN_CENTER, 0);
+        s_text_expanded = false;
+        show_companion(true);
+        return;
+    }
     lv_obj_set_flex_align(s_msg_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
                          LV_FLEX_ALIGN_START);
     lv_obj_set_style_text_align(s_ai_text_label, LV_TEXT_ALIGN_LEFT, 0);
@@ -207,6 +222,9 @@ void ui_init() {
         lv_obj_delete(s_screen);
         s_screen = nullptr;
     }
+    s_header = nullptr;
+    s_title_label = nullptr;
+    s_top_bar = nullptr;
     s_status_badge = nullptr;
     s_status_label = nullptr;
     s_msg_container = nullptr;
@@ -223,28 +241,28 @@ void ui_init() {
     lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
     ui_pixel_background(s_screen);
 
-    auto *header = ui_pixel_top_bar(s_screen);
-    ui_pixel_wifi_bars_create(header, UI_STATUS_WIFI_X, 18, s_wifi_bars);
-    auto *title = ui_pixel_label(header, "小智 AI", &buddy_font_16, UI_TEXT);
-    lv_obj_align(title, LV_ALIGN_LEFT_MID, 42, 0);
-    s_battery = ui_pixel_battery_create(header, UI_STATUS_BATTERY_X, 6, UI_TEXT, &lv_font_montserrat_14);
+    s_header = ui_pixel_top_bar(s_screen);
+    ui_pixel_wifi_bars_create(s_header, UI_STATUS_WIFI_X, 18, s_wifi_bars);
+    s_title_label = ui_pixel_label(s_header, "小智 AI", &buddy_font_16, UI_TEXT);
+    lv_obj_align(s_title_label, LV_ALIGN_LEFT_MID, 42, 0);
+    s_battery = ui_pixel_battery_create(s_header, UI_STATUS_BATTERY_X, 6, UI_TEXT, &lv_font_montserrat_14);
     refresh_status_bar();
 
-    lv_obj_t *top_bar = lv_obj_create(s_screen);
-    lv_obj_set_size(top_bar, 216, 28);
-    lv_obj_set_pos(top_bar, 12, 42);
-    lv_obj_set_style_bg_color(top_bar, lv_color_hex(UI_BG), 0);
-    lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(top_bar, 0, 0);
-    lv_obj_set_style_border_width(top_bar, 1, 0);
-    lv_obj_set_style_border_side(top_bar, LV_BORDER_SIDE_BOTTOM, 0);
-    lv_obj_set_style_border_color(top_bar, lv_color_hex(UI_BORDER), 0);
-    lv_obj_set_style_pad_hor(top_bar, 0, 0);
-    lv_obj_set_style_pad_ver(top_bar, 0, 0);
-    lv_obj_clear_flag(top_bar, LV_OBJ_FLAG_SCROLLABLE);
+    s_top_bar = lv_obj_create(s_screen);
+    lv_obj_set_size(s_top_bar, 216, 28);
+    lv_obj_set_pos(s_top_bar, 12, 42);
+    lv_obj_set_style_bg_color(s_top_bar, lv_color_hex(UI_BG), 0);
+    lv_obj_set_style_bg_opa(s_top_bar, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_top_bar, 0, 0);
+    lv_obj_set_style_border_width(s_top_bar, 1, 0);
+    lv_obj_set_style_border_side(s_top_bar, LV_BORDER_SIDE_BOTTOM, 0);
+    lv_obj_set_style_border_color(s_top_bar, lv_color_hex(UI_BORDER), 0);
+    lv_obj_set_style_pad_hor(s_top_bar, 0, 0);
+    lv_obj_set_style_pad_ver(s_top_bar, 0, 0);
+    lv_obj_clear_flag(s_top_bar, LV_OBJ_FLAG_SCROLLABLE);
 
     // Mini face keeps the expression visible once the conversation hides the big one.
-    s_status_badge = lv_obj_create(top_bar);
+    s_status_badge = lv_obj_create(s_top_bar);
     lv_obj_remove_style_all(s_status_badge);
     lv_obj_set_size(s_status_badge, face::kMiniW, face::kMiniH);
     lv_obj_align(s_status_badge, LV_ALIGN_LEFT_MID, 0, -1);
@@ -252,7 +270,7 @@ void ui_init() {
     s_badge_color = kAmberAccent;
     lv_obj_add_event_cb(s_status_badge, draw_badge, LV_EVENT_DRAW_MAIN, nullptr);
 
-    s_status_label = lv_label_create(top_bar);
+    s_status_label = lv_label_create(s_top_bar);
     lv_obj_set_style_text_font(s_status_label, &buddy_font_16, 0);
     lv_obj_set_style_text_color(s_status_label, lv_color_hex(kTextMain), 0);
     lv_label_set_long_mode(s_status_label, LV_LABEL_LONG_MODE_DOTS);
@@ -275,8 +293,8 @@ void ui_init() {
     lv_obj_set_style_pad_row(s_msg_container, kTextLineSpace, 0);
     lv_obj_set_style_text_line_space(s_msg_container, kTextLineSpace, 0);
     lv_obj_set_flex_flow(s_msg_container, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(s_msg_container, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_START);
+    lv_obj_set_flex_align(s_msg_container, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
     lv_obj_set_scroll_dir(s_msg_container, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(s_msg_container, LV_SCROLLBAR_MODE_AUTO);
 
@@ -348,6 +366,9 @@ void ui_hide() {
     if (s_screen) {
         lv_obj_delete(s_screen);
         s_screen = nullptr;
+        s_header = nullptr;
+        s_title_label = nullptr;
+        s_top_bar = nullptr;
         s_status_badge = nullptr;
         s_status_label = nullptr;
         s_msg_container = nullptr;
@@ -498,6 +519,54 @@ void ui_clear_text() {
     s_text_expanded = false;
     show_companion(true);
     lv_obj_scroll_to_y(s_msg_container, 0, LV_ANIM_OFF);
+    bsp_lvgl_unlock();
+}
+
+void ui_refresh_theme() {
+    if (!begin_update(200)) return;
+    ui_pixel_bg_color(s_screen, UI_BG);
+    if (s_header) {
+        ui_pixel_bg_color(s_header, ui_theme_get() == UI_THEME_NEON ? UI_BG : UI_SURFACE);
+        lv_obj_set_style_border_color(s_header, lv_color_hex(UI_BORDER), 0);
+        if (s_battery.fill) {
+            lv_obj_t *frame = lv_obj_get_parent(s_battery.fill);
+            if (frame) {
+                lv_obj_set_style_border_color(frame, lv_color_hex(UI_TEXT), 0);
+                lv_obj_t *nub = lv_obj_get_child(s_header, lv_obj_get_index(frame) + 1);
+                if (nub) ui_pixel_bg_color(nub, UI_TEXT);
+            }
+        }
+        if (s_battery.label) ui_pixel_text_color(s_battery.label, UI_TEXT);
+    }
+    ui_pixel_text_color(s_title_label, UI_TEXT);
+    if (s_top_bar) {
+        ui_pixel_bg_color(s_top_bar, UI_BG);
+        lv_obj_set_style_border_color(s_top_bar, lv_color_hex(UI_BORDER), 0);
+    }
+    ui_pixel_text_color(s_status_label,
+        s_face_state == State::Error || s_face_state == State::Disconnected ? UI_DANGER :
+        s_face_state == State::Connecting || s_face_state == State::Thinking ? UI_WARNING : UI_TEXT);
+    set_badge_color(
+        s_face_state == State::Error || s_face_state == State::Disconnected ? kRedAccent :
+        s_face_state == State::Listening ? kUserBlue :
+        s_face_state == State::Idle || s_face_state == State::Speaking ? kGreenAccent : kAmberAccent);
+    if (s_msg_container) {
+        ui_pixel_bg_color(s_msg_container, UI_BG);
+        lv_obj_set_style_border_color(s_msg_container, lv_color_hex(UI_BORDER), 0);
+    }
+    ui_pixel_text_color(s_user_text_label, kUserBlue);
+    ui_pixel_text_color(s_ai_text_label, kTextMain);
+    if (s_hint_label) {
+        const int32_t idx = lv_obj_get_index(s_hint_label);
+        lv_obj_t *divider = idx > 0 ? lv_obj_get_child(s_screen, idx - 1) : nullptr;
+        lv_obj_t *secondary = lv_obj_get_child(s_screen, idx + 1);
+        if (divider) ui_pixel_bg_color(divider, UI_BORDER);
+        ui_pixel_text_color(s_hint_label, UI_TEXT_DIM);
+        if (secondary) ui_pixel_text_color(secondary, UI_TEXT_DIM);
+    }
+    refresh_status_bar();
+    if (s_companion) lv_obj_invalidate(s_companion);
+    lv_obj_invalidate(s_screen);
     bsp_lvgl_unlock();
 }
 

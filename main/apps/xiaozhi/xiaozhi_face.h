@@ -31,6 +31,8 @@ struct Palette {
     uint32_t blush;   // cheeks, hearts, tongue
     uint32_t tear;    // tears, sweat, listening light
     uint32_t warn;    // thinking light and bubbles
+    uint32_t wave_mid = 0;  // optional multi-color waveform accents (0 = c.eye)
+    uint32_t wave_alt = 0;
 };
 
 struct Pose {

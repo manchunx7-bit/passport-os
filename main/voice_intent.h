@@ -12,7 +12,11 @@
 
 namespace voice_intent {
 
-enum class Source : uint8_t { None, Favorites, Daily, Playlist, Search, Radio };
+enum class Source : uint8_t {
+    None, Favorites, Daily, Playlist, Search, Radio,
+    PodcastSearch, PodcastHot, PodcastRecommended,
+    AudiobookSearch, AudiobookHot, AudiobookResume,
+};
 
 constexpr size_t kNameBytes = 64;
 constexpr size_t kDetailBytes = 32;
@@ -25,6 +29,7 @@ struct Request {
     passport_app_id_t app = APP_ID_COUNT;
     Source source = Source::None;
     bool shuffle = false;
+    bool podcast_latest = false;
     uint16_t stop_minutes = 0;  // pause playback after this long; 0 = never
     uint64_t song_id = 0;       // Search: start from this result
     char name[kNameBytes] = {};      // playlist name, search keywords or radio city

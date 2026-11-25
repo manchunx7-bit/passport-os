@@ -70,7 +70,9 @@ static QueueHandle_t s_key_queue = nullptr;
 // ESP-IDF task stack sizes are in bytes. The serial reader only queues bytes;
 // all app entry, capture and diagnostics execute on the existing input stack.
 alignas(16) static StackType_t s_button_stack[2048 / sizeof(StackType_t)];
-alignas(16) static StackType_t s_input_stack[8192 / sizeof(StackType_t)];
+// 2026-11-24: high-water mark was only 864 B free of 8192 (app start/stop,
+// MCP device tools and reminders all run here). +1 KB keeps a real margin.
+alignas(16) static StackType_t s_input_stack[9216 / sizeof(StackType_t)];
 alignas(16) static StackType_t s_serial_stack[2048 / sizeof(StackType_t)];
 alignas(16) static StackType_t s_monitor_stack[2560 / sizeof(StackType_t)];
 static StaticTask_t s_system_tasks[4];
@@ -312,6 +314,11 @@ static void handle_serial_command(int c) {
         } else {
             ESP_LOGW(TAG, "[SerialCmd] screenshot aborted: LVGL lock busy");
         }
+    } else if (c == 'F') {
+        if (bsp_lvgl_lock(pdMS_TO_TICKS(2000))) {
+            ui_capture_perf_probe();
+            bsp_lvgl_unlock();
+        }
     } else if (c == 'v') {
         bsp_battery_poll();
         bsp_battery_log_status();
@@ -468,7 +475,7 @@ extern "C" void app_main(void) {
     if (chime) boot_chime_start();
 
     // 5. 创建按键事件队列与输入分发任务 (系统就绪后正式接收用户输入)
-    //    input_disp 保留 8192，串口命令也由它执行 app_registry_switch_to()；
+    //    input_disp 保留 9216，串口命令也由它执行 app_registry_switch_to()；
     //    应用启动里最深的是 Home 天气图标 JPEG 解码 —— LVGL TJPEG
     //    decoder_info(文件源)在栈上放 4KB 工作缓冲(lv_tjpgd.c:110),
     //    3584/4096 栈实测爆栈(Stack protection fault,2026-09-13)。

@@ -175,7 +175,7 @@ private:
     // (PushIncomingAudio 中 300ms 有界等待)吸收常见突发；持续满仍会丢帧。
     // 将容量从 8KB 收紧至 3KB，直接向系统堆归还 5120 字节内部 SRAM，确保
     // 录音栈与 Opus 编码器能顺利拿到连续内存。
-    static constexpr size_t kPlayRingCap = 3072;
+    static constexpr size_t kPlayRingCap = 6144;
     uint8_t *play_ring_buf_{nullptr};
     Ring play_ring_{};
 

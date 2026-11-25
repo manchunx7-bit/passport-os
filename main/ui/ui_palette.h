@@ -12,6 +12,7 @@ typedef enum {
     UI_THEME_TRAVEL = 1,
     UI_THEME_PLAYFUL = 2,
     UI_THEME_NEON = 3,
+    UI_THEME_STUDIO = 4,
     UI_THEME_COUNT,
 } ui_theme_t;
 
@@ -35,6 +36,7 @@ typedef enum {
 void ui_theme_set(ui_theme_t theme);
 ui_theme_t ui_theme_get(void);
 bool ui_theme_is_classic(void);
+bool ui_theme_is_studio(void);
 bool ui_theme_is_multicolor(void);
 uint32_t ui_theme_color(ui_color_role_t role);
 // Dark artwork scenes keep the same hues with foregrounds suited to a dark ground.
@@ -42,6 +44,7 @@ uint32_t ui_theme_color_on_dark(ui_color_role_t role);
 uint32_t ui_theme_portrait_color(uint8_t level);
 uint32_t ui_theme_portrait_subject_color(uint8_t level);
 const char *ui_theme_name(ui_theme_t theme);
+uint32_t ui_studio_meter_color(unsigned index, unsigned count, uint8_t value);
 
 #ifdef __cplusplus
 }

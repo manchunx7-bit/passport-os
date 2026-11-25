@@ -7,6 +7,7 @@
 #include "bsp_audio.h"
 #include "app_fonts.h"
 #include "ui_pixel.h"
+#include "ui/status_wifi.h"
 #include <cstdio>
 #include <new>
 #include <ctime>
@@ -16,6 +17,7 @@ namespace {
 lv_obj_t *screen,*heading,*body,*footer,*lines[3],*alert,*alert_title,*alert_time,*alert_hint;
 lv_timer_t *timer;
 ui_pixel_battery_t battery{};
+lv_obj_t *wifi_bars[3];
 Record *rows;
 size_t count=0,selected=0;
 uint32_t detail_id=0;
@@ -30,7 +32,7 @@ void refresh() {
     if(!screen)return;
     if(rows)count=list(rows,kCapacity);else count=0;
     if(selected>=count)selected=count?count-1:0;
-    ui_pixel_battery_set(&battery,bsp_battery_soc());
+    ui_pixel_battery_set(&battery,bsp_battery_soc());ui_status_wifi_refresh(wifi_bars);
     for(auto *line:lines)lv_obj_add_flag(line,LV_OBJ_FLAG_HIDDEN);
     if(detail_id) {
         Record r{};if(!get(detail_id,&r)){detail_id=0;deleting=false;}
@@ -67,7 +69,8 @@ void start() {
     rows=new(std::nothrow) Record[kCapacity];
     screen=lv_obj_create(nullptr);ui_pixel_background(screen);
     auto *top=ui_pixel_top_bar(screen);
-    auto *name=ui_pixel_label(top,"备忘提醒",&buddy_font_16,UI_TEXT);lv_obj_align(name,LV_ALIGN_LEFT_MID,12,0);
+    ui_pixel_wifi_bars_create(top,UI_STATUS_WIFI_X,18,wifi_bars);
+    auto *name=ui_pixel_label(top,"备忘提醒",&buddy_font_16,UI_TEXT);lv_obj_align(name,LV_ALIGN_LEFT_MID,42,0);
     battery=ui_pixel_battery_create(top,UI_STATUS_BATTERY_X,6,UI_TEXT,&lv_font_montserrat_14);
     heading=label(screen,"",12,42,216,24,UI_ACCENT);
     body=label(screen,"",12,82,216,166,UI_TEXT);
@@ -86,6 +89,7 @@ void stop() {
     if(!bsp_lvgl_lock(1000))return;
     if(timer){lv_timer_delete(timer);timer=nullptr;}
     if(screen){lv_obj_delete(screen);screen=nullptr;}
+    for(auto *&bar:wifi_bars)bar=nullptr;
     delete[] rows;rows=nullptr;bsp_lvgl_unlock();
 }
 bool back() {

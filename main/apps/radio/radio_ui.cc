@@ -268,10 +268,10 @@ lv_obj_t *make_box(lv_obj_t *parent, int x, int y, int width, int height,
     lv_obj_set_size(object, width, height);
     lv_obj_set_style_bg_color(object, lv_color_hex(color), 0);
     lv_obj_set_style_bg_opa(object, LV_OPA_COVER, 0);
-    (void)radius;
-    lv_obj_set_style_radius(object, 0, 0);
+    const bool studio = ui_theme_is_studio();
+    lv_obj_set_style_radius(object, studio ? (radius > 0 ? radius : (color == UI_SURFACE || color == UI_SURFACE_ALT ? 6 : 0)) : 0, 0);
     if (color == UI_SURFACE || color == UI_SURFACE_ALT) {
-        lv_obj_set_style_border_width(object, ui_theme_is_classic() ? 1 : 0, 0);
+        lv_obj_set_style_border_width(object, ui_theme_is_classic() || studio ? 1 : 0, 0);
         lv_obj_set_style_border_color(object, lv_color_hex(UI_BORDER), 0);
     }
     return object;
@@ -307,6 +307,7 @@ const char *playback_text() {
         case RadioPlaybackState::Playing: return "正在播放";
         case RadioPlaybackState::Reconnecting: return "信号中断，正在重连";
         case RadioPlaybackState::Error: return "暂时无法播放";
+        case RadioPlaybackState::Finished: return "已播完";
     }
     return "准备播放";
 }
@@ -424,6 +425,51 @@ static bool contains_ignore_case(const char *hay, const char *sub) {
 
 void apply_location();
 
+// Two-line station names: when the name overflows one line, break at a
+// separator ("・", "·", space) so both lines fit, instead of letting the last
+// one or two glyphs fall alone onto the second line. Falls back to wrapping.
+void set_station_name_balanced(const char *text) {
+    const lv_font_t *font = lv_obj_get_style_text_font(s_station_name, LV_PART_MAIN);
+    const int32_t space = lv_obj_get_style_text_letter_space(s_station_name, LV_PART_MAIN);
+    // Layout may not have run yet when a station is applied; the label has a
+    // fixed style width and no horizontal padding.
+    const int32_t width = lv_obj_get_style_width(s_station_name, LV_PART_MAIN);
+    auto line_width = [&](const char *s) {
+        lv_point_t size;
+        lv_text_get_size(&size, s, font, space, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        return size.x;
+    };
+    char best[sizeof(s_station_name_text) + 2] = "";
+    if (width > 0 && line_width(text) > width) {
+        // U+00B7, U+30FB, U+2022, then plain ASCII separators.
+        static const char *const kSeparators[] = {"\xC2\xB7", "\xE3\x83\xBB", "\xE2\x80\xA2", " ", "|", "/"};
+        int32_t best_width = LV_COORD_MAX;
+        for (const char *sep : kSeparators) {
+            const size_t sep_len = std::strlen(sep);
+            for (const char *at = std::strstr(text, sep); at; at = std::strstr(at + sep_len, sep)) {
+                const bool drop = *sep == ' ';
+                char first[sizeof(best)];
+                const size_t head = static_cast<size_t>(at - text) + (drop ? 0 : sep_len);
+                if (head == 0 || head >= sizeof(first)) continue;
+                std::memcpy(first, text, head);
+                first[head] = '\0';
+                const char *second = at + sep_len;
+                if (!*second) continue;
+                const int32_t w1 = line_width(first), w2 = line_width(second);
+                const int32_t widest = w1 > w2 ? w1 : w2;
+                if (w1 > width || w2 > width || widest >= best_width) continue;
+                const size_t tail = std::strlen(second);
+                if (head + 1 + tail >= sizeof(best)) continue;
+                best_width = widest;
+                std::memcpy(best, first, head);
+                best[head] = '\n';
+                std::memcpy(best + head + 1, second, tail + 1);
+            }
+        }
+    }
+    lv_label_set_text(s_station_name, best[0] ? best : text);
+}
+
 void apply_station() {
     if (!s_station_name || !s_station_number || !s_station_description) return;
     char preset[20];
@@ -431,7 +477,7 @@ void apply_station() {
                   static_cast<unsigned>(s_station_index + 1),
                   static_cast<unsigned>(s_station_count));
     lv_label_set_text(s_station_number, preset);
-    lv_label_set_text(s_station_name, s_station_name_text);
+    set_station_name_balanced(s_station_name_text);
     ui_pixel_label_set_text(s_station_description, s_station_description_text);
     apply_location();
     apply_dial(true);
@@ -474,7 +520,11 @@ void apply_playback() {
         s_playback_state==RadioPlaybackState::Connecting?"连接中":s_playback_state==RadioPlaybackState::Buffering?"缓冲中":
         s_playback_state==RadioPlaybackState::Reconnecting?"重连中":s_playback_state==RadioPlaybackState::Error?"播放失败":"已暂停";
     ui_pixel_label_set_text(s_status,status);
-    ui_pixel_text_color(s_status,s_playback_state==RadioPlaybackState::Error?UI_DANGER:!s_network_connected?UI_WARNING:UI_TEXT_DIM);
+    ui_pixel_text_color(s_status,
+        s_playback_state==RadioPlaybackState::Error ? UI_DANGER
+        : !s_network_connected ? UI_WARNING
+        : (ui_theme_is_studio() && s_playback_state==RadioPlaybackState::Playing) ? UI_SUCCESS
+        : UI_TEXT_DIM);
     const bool playing = s_playback_state == RadioPlaybackState::Playing ||
                          s_playback_state == RadioPlaybackState::Buffering ||
                          s_playback_state == RadioPlaybackState::Connecting ||
@@ -570,7 +620,7 @@ void build_main() {
     s_dial_readout=make_label(s_main_group,"",12,203,146,kAmber,&ui_digits_32);
     lv_obj_set_height(s_dial_readout,40);
     auto *meter_panel=make_box(s_main_group,12,242,216,22,kBackground);
-    for(std::size_t i=0;i<kMeterCount;i++){s_meter[i]=make_box(meter_panel,2+i*12,20,8,2,kGrid);lv_obj_set_style_bg_opa(s_meter[i],LV_OPA_TRANSP,0);}
+    for(std::size_t i=0;i<kMeterCount;i++){s_meter[i]=make_box(meter_panel,2+i*12,20,8,2,kGrid);if(ui_theme_is_studio())lv_obj_set_style_radius(s_meter[i],2,0);lv_obj_set_style_bg_opa(s_meter[i],LV_OPA_TRANSP,0);}
     s_play_icon=make_label(s_main_group,"",0,0,1,kAmber);lv_obj_add_flag(s_play_icon,LV_OBJ_FLAG_HIDDEN);
     s_main_hint=ui_pixel_footer(s_main_group,"上下换台 · 确定播放","长按：上下音量 · 确定返回",&buddy_font_16);
 
@@ -1140,13 +1190,15 @@ void timer_callback(lv_timer_t *timer) {
     const uint32_t generation = s_level_generation.load(std::memory_order_acquire);
     if (generation != s_last_level_generation) {
         s_last_level_generation = generation;
+        const bool studio = ui_theme_is_studio();
         for (std::size_t i = 0; i < kMeterCount; ++i) {
             if (!s_meter[i]) continue;
             const int height = 2 + s_levels[i] * 19 / 100;
             lv_obj_set_pos(s_meter[i], 2 + static_cast<int>(i) * 12, 22 - height);
             lv_obj_set_size(s_meter[i], 8, height);
-            const uint32_t color = s_levels[i] > 85 ? kRed :
-                                   s_levels[i] > 62 ? kAmber : kGreen;
+            const uint32_t color = studio
+                ? ui_studio_meter_color(static_cast<unsigned>(i), static_cast<unsigned>(kMeterCount), s_levels[i])
+                : (s_levels[i] > 85 ? kRed : s_levels[i] > 62 ? kAmber : kGreen);
             ui_pixel_bg_color(s_meter[i], color);
             // Silent bars vanish so the idle meter is not another rule above the footer.
             lv_obj_set_style_bg_opa(s_meter[i], s_levels[i] ? LV_OPA_COVER : LV_OPA_TRANSP, 0);

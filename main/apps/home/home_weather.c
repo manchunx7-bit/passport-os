@@ -20,7 +20,17 @@ static const char *TAG = "home_weather";
 
 #define NVS_NAMESPACE "home_profile"
 #define RESPONSE_MAX 1024 /* forecast?current= 响应 < 500B,留余量 */
-#define HTTP_TIMEOUT_MS 15000
+#define HTTP_TIMEOUT_MS 30000 /* 慢网络下 DNS+TCP+TLS 可能超过 15 秒;退出首页仍可立即取消 */
+#define WEATHER_HOST_TIMEOUT_MS 15000 /* 两个天气主机各占一半,总时长仍为 30 秒 */
+
+/* api.open-meteo.com 按地区解析到不同节点,国内部分节点长时间连不上;
+ * historical-forecast-api 是另一组服务器,/v1/forecast 的 current 数据相同。
+ * 记住上次成功的主机,下次先试它。只由首页工作任务访问。 */
+static const char *const kWeatherHosts[] = {
+    "api.open-meteo.com",
+    "historical-forecast-api.open-meteo.com",
+};
+static unsigned s_weather_host;
 #define EPOCH_VALID_MIN 1700000000LL /* 与 home_clock 一致:早于此视为未校时 */
 
 static home_weather_t s_weather;
@@ -295,7 +305,7 @@ static esp_err_t receive_current(esp_http_client_event_t *event) {
 
 // One bounded response buffer and HTTP client at a time for weather and PM2.5.
 static esp_err_t fetch_current(const char *url, const char *lat, const char *lon,
-                               current_parser_t parser) {
+                               current_parser_t parser, int timeout_ms) {
     if (requests_cancelled()) return ESP_FAIL;
     current_response_t response = {0};
     esp_http_client_config_t config = {
@@ -315,7 +325,7 @@ static esp_err_t fetch_current(const char *url, const char *lat, const char *lon
         return ESP_FAIL;
     }
 
-    const int64_t deadline = esp_timer_get_time() + HTTP_TIMEOUT_MS * 1000LL;
+    const int64_t deadline = esp_timer_get_time() + timeout_ms * 1000LL;
     esp_err_t err = ESP_ERR_HTTP_EAGAIN;
     while (!requests_cancelled() && esp_timer_get_time() < deadline && !response.overflow) {
         err = esp_http_client_perform(client);
@@ -339,13 +349,26 @@ static esp_err_t fetch_current(const char *url, const char *lat, const char *lon
 
 esp_err_t home_weather_refresh(const char *lat, const char *lon) {
     if (!home_profile_coordinates_valid(lat, lon) || !lat[0] || !lon[0]) return ESP_ERR_INVALID_ARG;
-    char url[320];
-    snprintf(url, sizeof(url),
-             "https://api.open-meteo.com/v1/forecast"
-             "?latitude=%s&longitude=%s"
-             "&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,wind_direction_10m"
-             "&timezone=auto", lat, lon);
-    return fetch_current(url, lat, lon, weather_parse);
+    const unsigned host_count = sizeof(kWeatherHosts) / sizeof(kWeatherHosts[0]);
+    esp_err_t err = ESP_FAIL;
+    for (unsigned attempt = 0; attempt < host_count && !requests_cancelled(); ++attempt) {
+        const unsigned host = (s_weather_host + attempt) % host_count;
+        char url[320];
+        snprintf(url, sizeof(url),
+                 "https://%s/v1/forecast"
+                 "?latitude=%s&longitude=%s"
+                 "&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,wind_direction_10m"
+                 "&timezone=auto", kWeatherHosts[host], lat, lon);
+        err = fetch_current(url, lat, lon, weather_parse, WEATHER_HOST_TIMEOUT_MS);
+        if (err == ESP_OK) {
+            if (host != s_weather_host) ESP_LOGI(TAG, "Weather host switched to %s", kWeatherHosts[host]);
+            s_weather_host = host;
+            return ESP_OK;
+        }
+        if (attempt + 1 < host_count && !requests_cancelled())
+            ESP_LOGW(TAG, "Weather host %s failed; trying fallback", kWeatherHosts[host]);
+    }
+    return err;
 }
 
 static esp_err_t air_parse(const char *body, const char *lat, const char *lon) {
@@ -393,5 +416,5 @@ esp_err_t home_air_quality_refresh(const char *lat, const char *lon) {
     snprintf(url, sizeof(url),
              "https://air-quality-api.open-meteo.com/v1/air-quality"
              "?latitude=%s&longitude=%s&current=pm2_5&timezone=auto", lat, lon);
-    return fetch_current(url, lat, lon, air_parse);
+    return fetch_current(url, lat, lon, air_parse, HTTP_TIMEOUT_MS);
 }

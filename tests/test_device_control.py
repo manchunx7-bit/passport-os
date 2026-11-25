@@ -24,19 +24,29 @@ static std::atomic<int64_t> s_outdoor_until_us{0};
 static std::atomic<uint8_t> s_outdoor_restore{80};
 static int master_brightness=80;
 static int mock_soc=80;
-static int bsp_battery_soc(){return mock_soc;}
+extern "C" int bsp_battery_soc(void){return mock_soc;}
 uint8_t bsp_display_get_master_brightness(){return static_cast<uint8_t>(master_brightness);}
 static constexpr int NVS_READONLY=1;
-static constexpr int UI_THEME_CLASSIC=0,UI_THEME_COUNT=4;
-using ui_theme_t=int;
+#include "ui/ui_palette.h"
 static ui_theme_t s_theme=UI_THEME_CLASSIC;
+static ui_theme_t applied_theme=UI_THEME_CLASSIC;
 static constexpr uint16_t kTimeouts[]={0,15,30,60,120,300};
-static void ui_sfx_set_enabled(bool){}
-static void ui_theme_set(int){}
+static bool mock_key_sound=true;
+extern "C" {
+bool ui_sfx_enabled(void){return mock_key_sound;}
+void ui_sfx_set_enabled(bool enabled){mock_key_sound=enabled;}
+void ui_theme_set(ui_theme_t t){applied_theme=t;}
+ui_theme_t ui_theme_get(void){return applied_theme;}
+const char *ui_theme_name(ui_theme_t t){
+    static const char *const names[]={"经典绿","旅行仪器","像素白","霓虹黑","曜石工坊"};
+    return t<UI_THEME_COUNT?names[t]:"经典绿";
+}
+}
 static void bsp_display_set_master_brightness(uint8_t value){master_brightness=value;}
 static void bsp_audio_set_master_volume(uint8_t value){master_volume=value;}
 extern "C" void app_registry_set_screen_timeout(uint16_t){}
 static int nvs_set_u8(int h,const char*k,uint8_t v){return nvs_set_blob(h,k,&v,sizeof(v));}
+static int nvs_set_u16(int h,const char*k,uint16_t v){return nvs_set_blob(h,k,&v,sizeof(v));}
 static int nvs_get_u8(int h,const char*k,uint8_t*v){size_t n=sizeof(*v);return nvs_get_blob(h,k,v,&n);}
 static int nvs_get_u16(int h,const char*k,uint16_t*v){size_t n=sizeof(*v);return nvs_get_blob(h,k,v,&n);}
 template <typename T,size_t N> T validated(const T(&values)[N],T value,T fallback){
@@ -44,8 +54,11 @@ template <typename T,size_t N> T validated(const T(&values)[N],T value,T fallbac
 }
 '''
 signatures=['void apply_settings()', 'void settings_bootstrap(void)',
-            'bool save_percent(', 'uint8_t settings_get_volume(', 'uint8_t settings_get_brightness(',
-            'bool settings_save_volume(', 'bool settings_save_brightness(']
+            'bool save_percent(', 'bool save_u16(',
+            'uint8_t settings_get_volume(', 'uint8_t settings_get_brightness(',
+            'uint16_t settings_get_timeout(', 'ui_theme_t settings_get_theme(', 'bool settings_get_key_sound(',
+            'bool settings_save_volume(', 'bool settings_save_brightness(',
+            'bool settings_save_theme(', 'bool settings_save_timeout(', 'bool settings_save_key_sound(']
 code=prefix+'\n'.join(function(s) for s in signatures)+'\n'+(root/'tests/test_device_control.cc').read_text()
 with tempfile.TemporaryDirectory(prefix='passport-control-') as temporary:
     source=Path(temporary)/'test.cc';target=Path(temporary)/'test'

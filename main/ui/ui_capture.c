@@ -6,6 +6,7 @@
 #include "bsp_display.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
@@ -149,3 +150,52 @@ void ui_capture_dump_hex(void) {
     heap_caps_free(buf);
     ESP_LOGI(TAG, "capture done: %u lines", (unsigned)line_idx);
 }
+
+static int64_t s_probe_mark, s_probe_flush_us, s_probe_wait_us;
+static unsigned s_probe_flushes;
+static void probe_event(lv_event_t *e) {
+    const int64_t now = esp_timer_get_time();
+    switch (lv_event_get_code(e)) {
+        case LV_EVENT_FLUSH_START: ++s_probe_flushes; s_probe_mark = now; break;
+        case LV_EVENT_FLUSH_FINISH: s_probe_flush_us += now - s_probe_mark; break;
+        case LV_EVENT_FLUSH_WAIT_START: s_probe_mark = now; break;
+        case LV_EVENT_FLUSH_WAIT_FINISH: s_probe_wait_us += now - s_probe_mark; break;
+        default: break;
+    }
+}
+
+void ui_capture_perf_probe(void) {
+    lv_display_t *disp = lv_display_get_default();
+    lv_obj_t *scr = lv_screen_active();
+    if (!disp || !scr) return;
+    const size_t stride = (size_t)SHOT_W * 2u;
+    const int32_t rows = 12;
+    uint8_t *buf = heap_caps_malloc(stride * rows, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    lv_obj_update_layout(scr);
+    for (int run = 0; buf && run < 3; ++run) {
+        const int64_t t0 = esp_timer_get_time();
+        for (int32_t y = 0; y < SHOT_H; y += rows) {
+            lv_draw_buf_t db;
+            if (lv_draw_buf_init(&db, SHOT_W, rows, LV_COLOR_FORMAT_RGB565, stride, buf,
+                                 stride * rows) != LV_RESULT_OK) break;
+            render_band(disp, scr, &db, y, rows);
+        }
+        ESP_LOGI(TAG, "probe render-only: %lld us", (long long)(esp_timer_get_time() - t0));
+    }
+    heap_caps_free(buf);
+    static const lv_event_code_t codes[] = {LV_EVENT_FLUSH_START, LV_EVENT_FLUSH_FINISH,
+                                            LV_EVENT_FLUSH_WAIT_START, LV_EVENT_FLUSH_WAIT_FINISH};
+    for (unsigned i = 0; i < 4; ++i) lv_display_add_event_cb(disp, probe_event, codes[i], NULL);
+    for (int run = 0; run < 3; ++run) {
+        s_probe_flush_us = s_probe_wait_us = 0;
+        s_probe_flushes = 0;
+        lv_obj_invalidate(scr);
+        const int64_t t0 = esp_timer_get_time();
+        lv_refr_now(disp);
+        ESP_LOGI(TAG, "probe refresh: total=%lld us flush_cb=%lld us dma_wait=%lld us chunks=%u",
+                 (long long)(esp_timer_get_time() - t0), (long long)s_probe_flush_us,
+                 (long long)s_probe_wait_us, s_probe_flushes);
+    }
+    for (unsigned i = 0; i < 4; ++i) lv_display_remove_event_cb_with_user_data(disp, probe_event, NULL);
+}
+

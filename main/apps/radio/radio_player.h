@@ -20,9 +20,20 @@ enum class RadioPlaybackState {
     Playing,
     Reconnecting,
     Error,
+    Finished,
 };
 
-bool radio_player_init();
+// A finite stream shares the radio decoder/workspace but has no station UI or auto-skip.
+inline constexpr std::size_t kEpisodeMeterBars = 18;
+struct EpisodePlayback {
+    RadioPlaybackState state;
+    uint32_t offset;
+    uint32_t total;
+};
+bool radio_player_init(bool finite_stream = false);
+bool radio_player_play_episode(const char *url, uint32_t offset);
+EpisodePlayback radio_player_episode();
+void radio_player_episode_levels(uint8_t out[kEpisodeMeterBars]);
 // Stops the streaming task and releases decoder, codec, I2S/DMA and sync
 // resources. Returns false when the worker did not exit within the bounded
 // wait; in that case resources are deliberately kept to avoid use-after-free.

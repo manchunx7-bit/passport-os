@@ -144,6 +144,15 @@ bool app_protocol_parse(const char *json, size_t len, app_event_t *ev) {
                 ok = true;
             }
         }
+        else if (strcmp(type->valuestring, "pc.ptt") == 0) {
+            // 电脑键盘按住输入法热键:active=true 开麦/续期,false 关麦。
+            const cJSON *active = cJSON_GetObjectItemCaseSensitive(root, "active");
+            if (cJSON_IsBool(active)) {
+                ev->type = APP_EV_PC_PTT;
+                ev->u.pc_ptt.active = cJSON_IsTrue(active);
+                ok = true;
+            }
+        }
         // 未知 type:丢弃(返回 false,调用方记日志)
     }
     cJSON_Delete(root);

@@ -13,6 +13,9 @@ typedef struct {
     bool screen_on;
     bool panel_on;
     bool stream_started;
+    bool pc_ptt;            // 当前录音由电脑热键(pc.ptt)发起,需持续续期
+    uint64_t pc_ptt_ms;     // 最近一次 pc.ptt active=true 的时刻
+    bool pc_ptt_need_release; // 电脑热键达到最长时长后,须先松开(active=false)才能再开
     uint64_t pc_status_ms;
     uint64_t state_since_ms;
     uint64_t toast_until_ms;

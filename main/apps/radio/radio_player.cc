@@ -5,6 +5,7 @@
 
 #include "bsp_audio.h"
 #include "audio_workspace.h"
+#include "speaker_dsp.h"
 #include "launcher/settings.h"
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
@@ -41,6 +42,7 @@ static_assert(kStreamStackBytes + kInputSize + kOutputSize + kReaderStackBytes <
 StaticTask_t s_stream_tcb;
 StaticTask_t s_reader_tcb;
 constexpr std::size_t kLevelCount = 18;
+static_assert(kLevelCount == kEpisodeMeterBars);
 constexpr std::size_t kMaxStations = 10;
 // Consecutive silent failures tolerated before moving to the next station.
 constexpr uint8_t kMaxFailedAttempts = 3;
@@ -60,6 +62,20 @@ SemaphoreHandle_t s_player_stopped;
 SemaphoreHandle_t s_station_mutex;
 bool s_decoders_registered;
 RadioStation *s_stations;
+bool s_finite_stream;
+std::atomic<RadioPlaybackState> s_episode_state{RadioPlaybackState::Stopped};
+std::atomic<uint32_t> s_episode_offset{0};
+std::atomic<uint32_t> s_episode_total{0};
+std::atomic<uint8_t> s_episode_levels[kLevelCount]{};
+
+void clear_episode_levels() {
+    for (auto &level : s_episode_levels) level.store(0, std::memory_order_relaxed);
+}
+
+void report_playback(RadioPlaybackState state, const char *message) {
+    if (s_finite_stream) s_episode_state.store(state);
+    else radio_ui_set_playback(state, message);
+}
 
 RadioStation station_snapshot(std::size_t index) {
     RadioStation station = {};
@@ -186,10 +202,16 @@ void calculate_levels(const uint8_t *pcm, std::size_t bytes, uint8_t channels) {
         const float rms = count ? std::sqrt(static_cast<float>(energy) / count) : 0.0f;
         float db = rms > 1.0f ? 20.0f * std::log10(rms / 32768.0f) : -80.0f;
         int value = static_cast<int>((db + 58.0f) * 2.25f);
+        if (s_finite_stream) {
+            s_episode_levels[band].store(
+                static_cast<uint8_t>(std::clamp(value, 0, 100)),
+                std::memory_order_relaxed);
+            continue;
+        }
         value += static_cast<int>((band * 13 + s_generation.load()) % 9) - 4;
         levels[band] = static_cast<uint8_t>(std::clamp(value, 2, 100));
     }
-    radio_ui_set_audio_levels(levels, kLevelCount);
+    if (!s_finite_stream) radio_ui_set_audio_levels(levels, kLevelCount);
 }
 
 std::size_t downmix_to_mono(uint8_t *pcm, std::size_t bytes, uint8_t channels) {
@@ -210,7 +232,7 @@ std::size_t downmix_to_mono(uint8_t *pcm, std::size_t bytes, uint8_t channels) {
 
 // Out of memory is not the station's fault: it must not count toward skipping
 // a healthy station, and retrying at the station back-off rate fragments the heap.
-enum class StreamResult { Played, Failed, OutOfMemory };
+enum class StreamResult { Played, Failed, OutOfMemory, Finished };
 
 esp_audio_simple_dec_handle_t open_decoder(esp_audio_simple_dec_type_t type, bool *out_of_memory) {
     esp_audio_simple_dec_cfg_t config = {
@@ -281,7 +303,7 @@ StreamResult stream_station(std::size_t station, uint32_t generation) {
         ESP_LOGE(kTag, "Station %u has no stream URL", static_cast<unsigned>(station));
         return StreamResult::Failed;
     }
-    radio_ui_set_playback(RadioPlaybackState::Connecting, "正在连接电台");
+    report_playback(RadioPlaybackState::Connecting, "正在连接电台");
 
     struct Request { uint32_t generation; std::size_t station; std::atomic<bool> stop{false}; } request{generation, station};
     // Use the unused auxiliary tail rather than fragment AAC's large heap block.
@@ -294,18 +316,27 @@ StreamResult stream_station(std::size_t station, uint32_t generation) {
     }, &request, audio_workspace::radio::stations() + scratch_offset, scratch_bytes);
 
     bool played_audio = false;
+    bool reached_end = false;
+    uint32_t stream_offset = s_finite_stream ? s_episode_offset.load() : 0;
     bool out_of_memory = false;
     esp_audio_simple_dec_handle_t decoder = nullptr;
     uint8_t *input = nullptr;
     uint8_t *output = nullptr;
     uint8_t *compressed = nullptr;
+    if (s_finite_stream) clear_episode_levels();
 
     do {
-        if (!source.open(preset.url)) {
+        if (!request_still_current(generation, station) || !source.open(preset.url, stream_offset)) {
             out_of_memory = source.oom();
             break;
         }
-        decoder = open_decoder(source.type(), &out_of_memory);
+        if (s_finite_stream) {
+            if (source.status() != 206) stream_offset = 0;
+            s_episode_offset.store(stream_offset);
+            const auto length = source.content_length();
+            s_episode_total.store(length && length <= UINT32_MAX - stream_offset ? stream_offset + length : 0);
+        }
+        decoder = open_decoder(s_finite_stream ? ESP_AUDIO_SIMPLE_DEC_TYPE_MP3 : source.type(), &out_of_memory);
         if (!decoder) break;
         input = audio_workspace::storage + kStreamStackBytes;
         output = input + kInputSize;
@@ -323,18 +354,25 @@ StreamResult stream_station(std::size_t station, uint32_t generation) {
             (unsigned)capacity, (unsigned)(capacity / 2), (unsigned)source.icy_interval(),
             (unsigned)esp_get_free_heap_size());
 
-        radio_ui_set_playback(RadioPlaybackState::Buffering, "正在缓冲");
+        report_playback(RadioPlaybackState::Buffering, "正在缓冲");
         bool decode_failed = false;
         bool format_ready = false;
         bool showing_playing = false;
         uint8_t source_channels = 1;
+        uint32_t sample_rate = 0;
+        // High-pass + limiter: at 100% the codec curve adds +6 dB, so loud
+        // stations would otherwise clip hard inside the DAC.
+        SpeakerDsp dsp;
         bool buffering = true;
         uint32_t refills = 0;
         int64_t stats_at = esp_timer_get_time();
         while (request_still_current(generation, station)) {
             const bool finished = reader.finished.load(std::memory_order_acquire);
             const auto available = reader.buffer.available();
-            if (finished && !available) break;
+            if (finished && !available) {
+                reached_end = reader.source.complete();
+                break;
+            }
             // Begin at the normal refill watermark (8 KiB), retaining the full
             // 16 KiB FIFO and the same recovery reserve after an underrun.
             const auto resume_at = capacity / 2;
@@ -346,12 +384,14 @@ StreamResult stream_station(std::size_t station, uint32_t generation) {
             const auto received = reader.buffer.read(input, kInputSize);
             if (!received) {
                 buffering = true;
+                if (s_finite_stream) clear_episode_levels();
                 ++refills;
                 showing_playing = false;
-                radio_ui_set_playback(RadioPlaybackState::Buffering, "正在缓冲");
+                report_playback(RadioPlaybackState::Buffering, "正在缓冲");
                 continue;
             }
 
+            if (s_finite_stream) stream_offset += received;
             esp_audio_simple_dec_raw_t raw = {
                 .buffer = input,
                 .len = static_cast<uint32_t>(received),
@@ -415,6 +455,7 @@ StreamResult stream_station(std::size_t station, uint32_t generation) {
                         // Radio and Xiaozhi share one user-visible master volume.
                         // Do not multiply it by the legacy radio NVS volume again.
                         bsp_audio_set_volume(100);
+                        sample_rate = info.sample_rate;
                         ESP_LOGI(kTag, "Radio output: system=%u%%, app=100%%",
                                  static_cast<unsigned>(bsp_audio_get_master_volume()));
                         format_ready = true;
@@ -424,10 +465,13 @@ StreamResult stream_station(std::size_t station, uint32_t generation) {
                     if (format_ready) {
                         const std::size_t mono_bytes =
                             downmix_to_mono(frame.buffer, frame.decoded_size, source_channels);
+                        dsp.configure(sample_rate, bsp_audio_get_master_volume());
+                        dsp.process(reinterpret_cast<int16_t *>(frame.buffer), mono_bytes / sizeof(int16_t));
                         if (bsp_audio_write(frame.buffer, mono_bytes) != ESP_OK) continue;
                         // Meter updates are visual, not part of every MP3 frame's deadline.
                         static int64_t last_meter_us = 0;
                         const int64_t now = esp_timer_get_time();
+                        if (s_finite_stream) s_episode_offset.store(stream_offset - raw.len);
                         if (now - last_meter_us >= 50000) {
                             calculate_levels(frame.buffer, mono_bytes, 1);
                             last_meter_us = now;
@@ -435,7 +479,7 @@ StreamResult stream_station(std::size_t station, uint32_t generation) {
                         if (!showing_playing) {
                             played_audio = true;
                             showing_playing = true;
-                            radio_ui_set_playback(RadioPlaybackState::Playing, "正在播放");
+                            report_playback(RadioPlaybackState::Playing, "正在播放");
                         }
                     }
                 }
@@ -466,8 +510,10 @@ StreamResult stream_station(std::size_t station, uint32_t generation) {
     } while (false);
 
     // compressed belongs to the shared workspace until the player is stopped.
+    if (s_finite_stream) clear_episode_levels();
     if (decoder) esp_audio_simple_dec_close(decoder);
     out_of_memory |= source.oom();
+    if (s_finite_stream && reached_end && played_audio) return StreamResult::Finished;
     if (played_audio) return StreamResult::Played;
     return out_of_memory ? StreamResult::OutOfMemory : StreamResult::Failed;
 }
@@ -483,7 +529,7 @@ void player_task(void *) {
     while (!s_shutdown_requested.load(std::memory_order_acquire)) {
         if (!s_network_connected.load(std::memory_order_acquire)) {
             if (!reported_no_network) {
-                radio_ui_set_playback(RadioPlaybackState::Stopped, "等待网络");
+                report_playback(RadioPlaybackState::Stopped, "等待网络");
                 reported_no_network = true;
             }
             vTaskDelay(pdMS_TO_TICKS(100));
@@ -492,8 +538,8 @@ void player_task(void *) {
         reported_no_network = false;
 
         if (!s_wanted_playing.load(std::memory_order_acquire)) {
-            if (!reported_paused) {
-                radio_ui_set_playback(RadioPlaybackState::Stopped, "已暂停");
+            if (!reported_paused && !s_finite_stream) {
+                report_playback(RadioPlaybackState::Stopped, "已暂停");
                 reported_paused = true;
             }
             vTaskDelay(pdMS_TO_TICKS(100));
@@ -510,6 +556,15 @@ void player_task(void *) {
         }
         s_stream_active.store(true, std::memory_order_release);
         const StreamResult result = stream_station(station, generation);
+        if (s_finite_stream) {
+            if (request_still_current(generation, station)) {
+                s_wanted_playing.store(false);
+                report_playback(result == StreamResult::Finished ? RadioPlaybackState::Finished
+                                                                 : RadioPlaybackState::Error, "");
+            }
+            s_stream_active.store(false, std::memory_order_release);
+            continue;
+        }
         s_stream_active.store(false, std::memory_order_release);
         if (!request_still_current(generation, station)) continue;
 
@@ -518,7 +573,7 @@ void player_task(void *) {
             // to release memory before the next ~23 KiB decoder attempt.
             ESP_LOGW(kTag, "Radio paused for memory; retrying station %u later",
                      static_cast<unsigned>(station));
-            radio_ui_set_playback(RadioPlaybackState::Reconnecting,
+            report_playback(RadioPlaybackState::Reconnecting,
                                   "内存不足，稍后重试");
             for (unsigned i = 0; i < 100 && request_still_current(generation, station); ++i) {
                 vTaskDelay(pdMS_TO_TICKS(100));
@@ -531,7 +586,7 @@ void player_task(void *) {
             // simply dropped. Keep it and reconnect.
             failed_attempts = 0;
             auto_skips = 0;
-            radio_ui_set_playback(RadioPlaybackState::Reconnecting,
+            report_playback(RadioPlaybackState::Reconnecting,
                                   "信号中断，正在重连");
             for (unsigned i = 0; i < 12 && !s_shutdown_requested.load(); ++i) {
                 vTaskDelay(pdMS_TO_TICKS(100));
@@ -546,7 +601,7 @@ void player_task(void *) {
         if (failed_attempts >= kMaxFailedAttempts && count > 1 && auto_skips < kMaxAutoSkips) {
             ESP_LOGW(kTag, "Station %u unreachable, skipping to the next one",
                      static_cast<unsigned>(station));
-            radio_ui_set_playback(RadioPlaybackState::Error,
+            report_playback(RadioPlaybackState::Error,
                                   "电台无法播放 已换台");
             for (unsigned i = 0; i < 12 && !s_shutdown_requested.load(); ++i) {
                 vTaskDelay(pdMS_TO_TICKS(100));
@@ -560,7 +615,7 @@ void player_task(void *) {
 
         // Still retrying on its own: show progress, not a dead end.
         const bool network_suspect = auto_skips >= kMaxAutoSkips;
-        radio_ui_set_playback(RadioPlaybackState::Reconnecting,
+        report_playback(RadioPlaybackState::Reconnecting,
                               network_suspect ? "网络无法访问电台，重试中" : "连接失败，正在重试");
         for (unsigned i = 0; i < (network_suspect ? 60u : 25u) && request_still_current(generation, station); ++i) {
             vTaskDelay(pdMS_TO_TICKS(100));
@@ -575,12 +630,12 @@ void player_task(void *) {
 
 }  // namespace
 
-bool radio_player_init() {
+bool radio_player_init(bool finite_stream) {
     if (s_player_task.load(std::memory_order_acquire) != nullptr) {
         // A bounded deinit may deliberately leave a slow worker and all of its
         // resources alive.  Do not let the next app entry mistake that
         // shutting-down worker for a reusable player instance.
-        return !s_shutdown_requested.load(std::memory_order_acquire);
+        return finite_stream == s_finite_stream && !s_shutdown_requested.load(std::memory_order_acquire);
     }
     if (!audio_workspace::acquire(audio_workspace::Owner::Radio)) {
         ESP_LOGE(kTag, "Audio workspace still owned by another app");
@@ -590,6 +645,10 @@ bool radio_player_init() {
     s_network_connected.store(false, std::memory_order_release);
     s_wanted_playing.store(false, std::memory_order_release);
     s_stream_active.store(false, std::memory_order_release);
+    s_finite_stream = finite_stream;
+    s_episode_state.store(RadioPlaybackState::Stopped);
+    s_episode_offset.store(0);
+    s_episode_total.store(0);
 
     s_station_mutex = xSemaphoreCreateMutex();
     s_player_stopped = xSemaphoreCreateBinary();
@@ -636,9 +695,11 @@ bool radio_player_init() {
     s_decoders_registered = true;
     bsp_audio_set_volume(100);
 
-    radio_ui_set_station(s_station_index.load(), radio_player_station_count(),
-                         radio_player_station(s_station_index.load()));
-    radio_ui_set_volume(radio_player_volume());
+    if (!s_finite_stream) {
+        radio_ui_set_station(s_station_index.load(), radio_player_station_count(),
+                             radio_player_station(s_station_index.load()));
+        radio_ui_set_volume(radio_player_volume());
+    }
     TaskHandle_t task = xTaskCreateStatic(player_task, "radio_stream", kStreamStackBytes, nullptr, 6,
         reinterpret_cast<StackType_t *>(audio_workspace::storage), &s_stream_tcb);
     if (task == nullptr) {
@@ -702,14 +763,47 @@ void radio_player_set_network(bool connected) {
     s_generation.fetch_add(1, std::memory_order_acq_rel);
 }
 
+bool radio_player_play_episode(const char *url, uint32_t offset) {
+    if (!s_finite_stream || !s_player_task.load() || !url || !*url ||
+        std::strlen(url) >= sizeof(RadioStation::url) || s_wanted_playing.load() ||
+        s_stream_active.load()) return false;
+    RadioStation episode{};
+    std::strcpy(episode.url, url);
+    if (!install_stations(&episode, 1, nullptr, nullptr)) return false;
+    s_episode_offset.store(offset);
+    s_episode_total.store(0);
+    report_playback(RadioPlaybackState::Connecting, "");
+    s_wanted_playing.store(true, std::memory_order_release);
+    return true;
+}
+
+EpisodePlayback radio_player_episode() {
+    return {s_episode_state.load(), s_episode_offset.load(), s_episode_total.load()};
+}
+
+void radio_player_episode_levels(uint8_t out[kEpisodeMeterBars]) {
+    if (!out) return;
+    if (!s_finite_stream || !s_stream_active.load(std::memory_order_acquire) ||
+        !s_wanted_playing.load(std::memory_order_acquire)) {
+        std::memset(out, 0, kEpisodeMeterBars);
+        return;
+    }
+    for (std::size_t i = 0; i < kEpisodeMeterBars; ++i) {
+        out[i] = s_episode_levels[i].load(std::memory_order_relaxed);
+    }
+}
+
 void radio_player_toggle() {
     radio_player_set_playing(!radio_player_is_playing());
 }
 
 void radio_player_set_playing(bool playing) {
-    s_wanted_playing.store(playing, std::memory_order_release);
     s_generation.fetch_add(1, std::memory_order_acq_rel);
-    if (!playing) radio_ui_set_playback(RadioPlaybackState::Stopped, "已暂停");
+    s_wanted_playing.store(playing, std::memory_order_release);
+    if (!playing) {
+        if (s_finite_stream) clear_episode_levels();
+        report_playback(RadioPlaybackState::Stopped, "已暂停");
+    }
 }
 
 bool radio_player_is_playing() {
@@ -741,7 +835,7 @@ void radio_player_set_station(std::size_t index) {
     save_station_name(chosen.name);
     radio_ui_set_station(index, radio_player_station_count(), radio_player_station(index));
     if (radio_player_is_playing()) {
-        radio_ui_set_playback(RadioPlaybackState::Connecting, "正在切换电台");
+        report_playback(RadioPlaybackState::Connecting, "正在切换电台");
     }
 }
 
@@ -797,7 +891,7 @@ bool radio_player_replace_stations_resuming(const RadioStation *stations,
 
 void radio_player_set_volume(uint8_t volume) {
     settings_set_volume(volume);
-    radio_ui_set_volume(radio_player_volume());
+    if (!s_finite_stream) radio_ui_set_volume(radio_player_volume());
 }
 
 uint8_t radio_player_volume() {

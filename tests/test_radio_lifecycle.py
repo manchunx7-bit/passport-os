@@ -5,7 +5,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 player = (ROOT / 'main/apps/radio/radio_player.cc').read_text()
-player = player[player.index('bool radio_player_init()'):player.index('void radio_player_set_network')]
+player = player[player.index('bool radio_player_init('):player.index('void radio_player_set_network')]
 app = (ROOT / 'main/apps/radio/app_radio.cc').read_text()
 catalog = app[app.index('bool catalog_cancelled()'):app.index('void start_catalog()')]
 prelude = r'''
@@ -36,7 +36,9 @@ static std::atomic<TaskHandle_t> s_player_task;
 static std::atomic<bool> s_shutdown_requested,s_network_connected,s_wanted_playing,s_stream_active;
 static std::atomic<unsigned> s_generation,s_station_count,s_station_index;
 static void *s_station_mutex,*s_player_stopped;
-static bool s_decoders_registered;
+static bool s_decoders_registered, s_finite_stream;
+static std::atomic<RadioPlaybackState> s_episode_state;
+static std::atomic<uint32_t> s_episode_offset, s_episode_total;
 static RadioStation *s_stations;
 static constexpr unsigned kMaxStations=10,kStreamStackBytes=7168;
 static int s_stream_tcb,token;
@@ -103,6 +105,9 @@ int main(){
   for(auto p=radio::stations()+4180;p<storage+kBytes;p++)assert(*p==0x5a);
   step=fail_at=0;assert(radio_player_init());assert(radio_player_deinit(10));
  }
+ step=fail_at=0;assert(radio_player_init(true));assert(s_finite_stream);
+ assert(!radio_player_init());assert(radio_player_deinit(0));
+ assert(radio_player_init());assert(!s_finite_stream);assert(radio_player_deinit(0));
  s_radio_active=s_ui_alive=s_catalog_running=true;idle=false;
  catalog_worker(nullptr);assert(!queries && !allocations && playing && !s_catalog_running);
  s_catalog_running=true;idle=true;cancel_during_wait=true;

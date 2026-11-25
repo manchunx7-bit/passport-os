@@ -25,9 +25,6 @@ constexpr char kTag[] = "power";
 constexpr gpio_num_t kWakePin = GPIO_NUM_0;  // shared button ADC node
 constexpr uint16_t kButtonRanges[BSP_BTN_COUNT][2] = BSP_BTN_MV_TABLE;
 bool s_hold_hint;
-// Battery warning beep; retried each 10 s gauge poll while an audio app or
-// switch blocks it, then dropped so it cannot hold the shared alarm slot.
-uint8_t s_beep_polls;
 
 void wake_pin_input() {
     const gpio_config_t pin = {
@@ -109,11 +106,6 @@ void power_off(const char *message) {
 
 bool power_battery_tick(void) {
     static battery_guard_t guard;
-    if (s_beep_polls) {
-        // Done (or refused) on a later poll after the request; give up after 3.
-        if (app_registry_sound_notice()) s_beep_polls = 0;
-        else if (!--s_beep_polls && !reminders::alarm_active()) ui_sfx_cancel_alarm();
-    }
     const int soc = bsp_battery_soc();
     switch (battery_guard_step(&guard, soc, bsp_battery_mv())) {
         case BATTERY_WARN:
@@ -122,11 +114,9 @@ bool power_battery_tick(void) {
             ESP_LOGW(kTag, "Low battery: %d%%", soc);
             // Session-only dimming; the saved brightness returns after a charge and reboot.
             bsp_display_set_master_brightness(battery_brightness(soc, bsp_display_get_master_brightness()));
+            // Silent by user request (2026-11-21): on-screen notice and dimming only, no beep.
             show_notice(critical ? "电量低于 5%\n即将自动关机，请立即充电"
                                  : "电量低于 10%\n已调暗屏幕，请尽快充电", 4000);
-            // Request now; later polls collect completion (or retry a stale one).
-            s_beep_polls = 3;
-            app_registry_sound_notice();
             return false;
         }
         case BATTERY_SHUTDOWN:

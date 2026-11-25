@@ -75,6 +75,7 @@ typedef enum {
     APP_EV_USB_DISCONNECTED, // USB 会话断(拔线:is_connected 翻转)
     APP_EV_TIME_SET,         // 校时下行(epoch 秒 UTC;双通道共用:CTRL time.set 行 + SYS time set)
     APP_EV_PC_STATUS,        // Hotkey forwarder capability heartbeat (not ASR status)
+    APP_EV_PC_PTT,           // 电脑键盘按住输入法热键:开麦/续期(active=true)或关麦(false)
 } app_event_type_t;
 
 // ---------------- 链路通道(双通道常开架构,2026-08-28) ----------------
@@ -153,6 +154,7 @@ typedef struct {
         } transcript;                                   // TRANSCRIPT
         struct { int64_t epoch; } time_set;             // TIME_SET(UTC 秒,int64 对齐 8,union 仍 ≤228B)
         struct { bool audio_ready; bool hotkey_ready; } pc_status;
+        struct { bool active; } pc_ptt;                 // PC_PTT
     } u;
 } app_event_t;
 
@@ -206,6 +208,7 @@ typedef struct {
     bool           screen_on;
     bool           panel_on;      // 面板供电(SLPIN 断电后 false)
     bool           net_busy;      // 音频丢帧中 → BUSY 横幅
+    bool           pc_ptt;        // 本次录音由电脑热键发起(提示"松开电脑热键")
     bool           ble_connected; // BLE 连接是否建立(未订阅时图标灰色)
     char           link_name[8];  // 当前链路通道名:"BLE"/"USB"(断线横幅按此渲染)
     bool           battery_available;
@@ -240,6 +243,10 @@ typedef struct {
 // PTT 最长单次说话保护上限: 放宽至 10 分钟 (600秒)，支持长时间连续自然语音输入，
 // 同时防止极端物理按键卡死耗尽电池。
 #define APP_PTT_MAX_TALK_MS     600000u
+// 电脑热键开麦需 companion 持续续期(约每 500ms 一发 pc.ptt active=true)。
+// 超过本值未续期即自动关麦 —— UDP 无重传,关麦帧丢失或电脑程序卡死时,
+// 设备不能一直开着麦克风。
+#define APP_PC_PTT_TIMEOUT_MS   1500u
 
 #ifdef __cplusplus
 }

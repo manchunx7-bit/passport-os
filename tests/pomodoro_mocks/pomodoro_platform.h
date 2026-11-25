@@ -73,6 +73,9 @@ inline void ui_pixel_background(lv_obj_t*){}
 inline lv_obj_t *ui_pixel_top_bar(lv_obj_t *p){return lv_obj_create(p);}
 inline ui_pixel_battery_t ui_pixel_battery_create(lv_obj_t*,int,int,uint32_t,const lv_font_t*){return {};}
 inline void ui_pixel_battery_set(ui_pixel_battery_t*,int){}
+inline int mock_wifi_level=-1;
+inline void ui_pixel_wifi_bars_create(lv_obj_t *p,int,int,lv_obj_t *bars[3]){for(int i=0;i<3;++i)bars[i]=lv_obj_create(p);}
+inline void ui_pixel_wifi_bars_set(lv_obj_t *bars[3],int level,uint32_t){assert(bars[0]);mock_wifi_level=level;}
 inline lv_obj_t *ui_pixel_footer(lv_obj_t *parent,const char *a,const char *b,const lv_font_t *f){
     ui_pixel_label(parent,b,f,0);return ui_pixel_label(parent,a,f,0);
 }

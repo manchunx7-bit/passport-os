@@ -7,7 +7,7 @@
 namespace voice_intent {
 namespace {
 
-constexpr uint32_t kMagic = 0x564e5432;  // "VNT2"
+constexpr uint32_t kMagic = 0x564e5433;  // "VNT3"
 
 // RTC memory: survives the clean-launch esp_restart() like app_registry's
 // target record, and costs nothing from the main heap region.

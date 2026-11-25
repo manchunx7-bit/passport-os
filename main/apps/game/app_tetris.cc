@@ -31,10 +31,10 @@ constexpr char kTag[] = "app_tetris";
    结果一路降级到 cell=10(100x200 —— 比屏幕一半还窄,这就是"游戏区很小")。
    切片也救不了:空闲空间基本集中在同一块里,切 4 条只是把同一块切成 4 份。
 
-   改成 **200 个 lv_obj 小方块网格**:每格一个对象,颜色用**共享静态样式**
-   切换(不产生逐对象局部样式)。单块内存只占 ~110B,碎片堆也放得下,总占用
-   (~22KB)反而比原来 40KB 的帧缓冲更小。每次移动只有个位数格子变色,
-   LVGL 只重绘那些小区域。
+   2026-09-13 曾改为 200 个 lv_obj 小方块(~22KB 堆)。2026-11-24 实测建这 200 个
+   对象要 ~0.8 s(进入到首帧 1.2 s),且每次局部刷新都要遍历 200 多个对象。
+   现在棋盘只有**一个对象**:DRAW_MAIN_END 回调按 s_shown 只画与当前刷新条带
+   相交的格子;格子变色时只失效那一格。无帧缓冲,不随格子数增加堆占用。
    --------------------------------------------------------------------------- */
 
 int s_cell;
@@ -57,16 +57,11 @@ static uint32_t kPieceColors[TC_PIECE_KINDS + 1] = {
     0xFFB23E, /* 7 L 橙 */
 };
 
-/* 共享静态样式:每色一份,全部格子复用 —— 不产生逐对象局部样式分配 */
-lv_style_t s_cell_styles[TC_PIECE_KINDS + 1];
-bool s_styles_ready = false;
-
 std::atomic<bool> s_active{false};
 lv_timer_t *s_timer = nullptr;
 lv_obj_t *s_screen = nullptr;
-lv_obj_t *s_board = nullptr;                        /* 棋盘容器(底色 = 棋盘墨色) */
-lv_obj_t *s_grid[TC_ROWS][TC_COLS] = {};            /* 格子对象 */
-uint8_t s_shown[TC_ROWS][TC_COLS] = {};             /* 已显示的颜色索引,用于差分 */
+lv_obj_t *s_board = nullptr;                        /* 棋盘(底色 = 网格线墨色,格子自绘) */
+uint8_t s_shown[TC_ROWS][TC_COLS] = {};             /* 已显示的颜色索引,用于差分与自绘 */
 lv_obj_t *s_score_lbl = nullptr;
 lv_obj_t *s_val_score = nullptr;
 lv_obj_t *s_val_lines = nullptr;
@@ -98,15 +93,32 @@ lv_obj_t *block(lv_obj_t *parent, int x, int y, int w, int h, uint32_t color) {
     return o;
 }
 
-/* 格子对象:预设为 0 号样式(暗底+方角+无边距),消除 LVGL 默认主题产生的圆角白点 */
-lv_obj_t *cell_obj(lv_obj_t *parent, int x, int y, int sz) {
-    lv_obj_t *o = lv_obj_create(parent);
-    if (!o) return nullptr;
-    lv_obj_remove_flag(o, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_pos(o, x, y);
-    lv_obj_set_size(o, sz, sz);
-    lv_obj_add_style(o, &s_cell_styles[0], 0);
-    return o;
+/* 第 row 行第 col 列格子的绝对坐标:(cell-1) 边长 + 1px 偏移,四周露出 1px 墨色网格线 */
+lv_area_t cell_area(const lv_area_t &board, int col, int row) {
+    const int32_t x = board.x1 + 1 + col * s_cell, y = board.y1 + 1 + row * s_cell;
+    return {x, y, x + s_cell - 2, y + s_cell - 2};
+}
+
+/* 只为与本次刷新条带相交的格子建绘制任务(12 行条带通常只碰到一两行格子) */
+void draw_board_event(lv_event_t *event) {
+    lv_layer_t *layer = lv_event_get_layer(event);
+    lv_area_t board;
+    lv_obj_get_coords(s_board, &board);
+    const lv_area_t clip = layer->_clip_area;
+    lv_draw_rect_dsc_t paint;
+    lv_draw_rect_dsc_init(&paint);
+    paint.bg_opa = LV_OPA_COVER;
+    for (int r = 0; r < TC_ROWS; ++r) {
+        const int32_t y1 = board.y1 + 1 + r * s_cell;
+        if (y1 > clip.y2) break;
+        if (y1 + s_cell - 2 < clip.y1) continue;
+        for (int c = 0; c < TC_COLS; ++c) {
+            const lv_area_t cell = cell_area(board, c, r);
+            if (cell.x1 > clip.x2 || cell.x2 < clip.x1) continue;
+            paint.bg_color = lv_color_hex(kPieceColors[s_shown[r][c]]);
+            lv_draw_rect(layer, &paint, &cell);
+        }
+    }
 }
 
 lv_obj_t *mk_label(lv_obj_t *parent, const char *text, const lv_font_t *font,
@@ -120,32 +132,18 @@ lv_obj_t *mk_label(lv_obj_t *parent, const char *text, const lv_font_t *font,
 }
 
 void ensure_styles() {
-    kPieceColors[0] = UI_SURFACE_ALT;
-    if (s_styles_ready) {
-        lv_style_set_bg_color(&s_cell_styles[0], lv_color_hex(kPieceColors[0]));
-        return;
-    }
-    for (int i = 0; i <= TC_PIECE_KINDS; ++i) {
-        lv_style_init(&s_cell_styles[i]);
-        lv_style_set_radius(&s_cell_styles[i], 0);
-        lv_style_set_border_width(&s_cell_styles[i], 0);
-        lv_style_set_pad_all(&s_cell_styles[i], 0);
-        lv_style_set_bg_opa(&s_cell_styles[i], LV_OPA_COVER);
-        lv_style_set_bg_color(&s_cell_styles[i], lv_color_hex(kPieceColors[i]));
-    }
-    s_styles_ready = true;
+    kPieceColors[0] = UI_SURFACE_ALT; /* 空格子底色随主题 */
 }
 
 /* 单格换色(差分:颜色没变就完全不碰 LVGL) */
 void cell_set(int col, int row, uint8_t idx) {
     if (col < 0 || col >= TC_COLS || row < 0 || row >= TC_ROWS) return;
-    const uint8_t prev = s_shown[row][col];
-    if (prev == idx) return;
-    lv_obj_t *o = s_grid[row][col];
-    if (!o) return;
-    lv_obj_remove_style(o, &s_cell_styles[prev], 0);
-    lv_obj_add_style(o, &s_cell_styles[idx], 0);
+    if (s_shown[row][col] == idx || !s_board) return;
     s_shown[row][col] = idx;
+    lv_area_t board;
+    lv_obj_get_coords(s_board, &board);
+    const lv_area_t cell = cell_area(board, col, row);
+    lv_obj_invalidate_area(s_board, &cell);
 }
 
 /* 整板重绘:先算目标色板,再逐格差分 —— 只有真正变色的格子才会触发重绘 */
@@ -258,8 +256,8 @@ void tick(lv_timer_t *) {
     if (!s_active.load()) return;
     ++s_frame;
 
-    /* 首帧建 UI:建 200 个格子对象的 LVGL 调用链在 LVGL 任务 7KB 栈上跑;
-       输入任务只有 3KB,直接建会栈保护崩溃(真机踩过)。 */
+    /* 首帧建 UI:在 LVGL 任务里建(历史上 200 个格子对象曾把小栈输入任务撑爆,
+       保持在 LVGL 任务的大栈上建)。 */
     if (!s_screen) {
         build_ui();
         lv_screen_load(s_screen);
@@ -290,21 +288,15 @@ void tick(lv_timer_t *) {
     }
 }
 
-/* 按当前 s_cell 建立棋盘容器 + 格子网格;任一步失败返回 false(调用方降档) */
+/* 按当前 s_cell 建立自绘棋盘;失败返回 false(调用方降档) */
 bool build_board() {
     ensure_styles();
+    for (auto &row : s_shown)
+        for (uint8_t &cell : row) cell = 0;
     /* 棋盘底色设为纯黑 0x000000,四周与每格之间 1px 缝隙天然呈现纯黑网格线 */
     s_board = block(s_screen, 12, 30, s_field_w + 1, s_field_h + 1, 0x000000);
     if (!s_board) return false;
-    for (int r = 0; r < TC_ROWS; ++r) {
-        for (int c = 0; c < TC_COLS; ++c) {
-            /* (cell-1) 边长 + 1px 偏移,四周自然形成 1px 纯黑像素网格线 */
-            lv_obj_t *o = cell_obj(s_board, 1 + c * s_cell, 1 + r * s_cell, s_cell - 1);
-            if (!o) return false;
-            s_grid[r][c] = o;
-            s_shown[r][c] = 0;
-        }
-    }
+    lv_obj_add_event_cb(s_board, draw_board_event, LV_EVENT_DRAW_MAIN_END, nullptr);
     return true;
 }
 
@@ -313,11 +305,8 @@ void drop_board() {
         lv_obj_delete(s_board);
         s_board = nullptr;
     }
-    for (int r = 0; r < TC_ROWS; ++r)
-        for (int c = 0; c < TC_COLS; ++c) {
-            s_grid[r][c] = nullptr;
-            s_shown[r][c] = 0;
-        }
+    for (auto &row : s_shown)
+        for (uint8_t &cell : row) cell = 0;
 }
 
 void build_oom_page() {
@@ -474,20 +463,11 @@ static void tetris_stop(void) {
         lv_obj_delete(s_screen);
         s_screen = nullptr;
     }
-    // Shared styles still own heap property arrays. No cell references them
-    // after the screen is deleted; retaining them pins holes between sessions.
-    if (s_styles_ready) {
-        for (auto &style : s_cell_styles) lv_style_reset(&style);
-        s_styles_ready = false;
-    }
     bsp_lvgl_unlock();
 
     s_board = nullptr;
-    for (int r = 0; r < TC_ROWS; ++r)
-        for (int c = 0; c < TC_COLS; ++c) {
-            s_grid[r][c] = nullptr;
-            s_shown[r][c] = 0;
-        }
+    for (auto &row : s_shown)
+        for (uint8_t &cell : row) cell = 0;
     s_score_lbl = s_hint_lbl = s_controls = nullptr;
     s_val_score = s_val_lines = s_val_level = s_val_best = nullptr;
     s_dead_panel = s_dead_info = s_dead_best = nullptr;

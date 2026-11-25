@@ -119,8 +119,10 @@ inline int bsp_audio_read(void *,size_t) {if(mock_on_read) mock_on_read();return
 inline int bsp_audio_write(void *,size_t) {if(mock_on_write) mock_on_write(); return ESP_OK;}
 inline void settings_set_volume(uint8_t) {}
 constexpr int BSP_BTN_OK=0, BSP_BTN_UP=1, BSP_BTN_DOWN=2;
+enum class WifiPowerSaveLevel { LOW_POWER, BALANCED, PERFORMANCE };
 class WifiManager {public: static WifiManager &GetInstance(){static WifiManager w;return w;}
-    bool IsConnected() const {return true;} };
+    bool IsConnected() const {return true;}
+    void SetPowerSaveLevel(WifiPowerSaveLevel) {} };
 
 using esp_websocket_client_handle_t=void *;
 using esp_event_base_t=const char *;

@@ -41,6 +41,7 @@ done
 "$test_dir/stopwatch"
 python3 tests/test_wifi_configure.py
 python3 tests/test_wifi_internet.py
+python3 tests/test_esp_tls_connect.py
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g -Imain \
     tests/test_battery_guard.c -o "$test_dir/battery-guard"
 "$test_dir/battery-guard"
@@ -135,6 +136,10 @@ python3 tests/test_public_build.py
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
     tests/test_voice_remote.c main/apps/voice/app_state.c -o "$test_dir/voice-remote"
 "$test_dir/voice-remote"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
+    -Imain -Itests/battery_mocks -Itests/vendor/cjson \
+    tests/test_voice_protocol.c main/apps/voice/app_protocol.c tests/vendor/cjson/cJSON.c -o "$test_dir/voice-protocol"
+"$test_dir/voice-protocol"
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/battery_mocks -Icomponents/bsp/include \
     tests/test_battery_driver.c components/bsp/src/bsp_battery.c -o "$test_dir/battery"
 "$test_dir/battery"
@@ -149,8 +154,8 @@ python3 tests/test_media_startup.py
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined -Imain \
     tests/test_aihot.cc main/apps/netease/netease_json.cc -o "$test_dir/aihot"
 "$test_dir/aihot"
-"${CXX:-c++}" -std=c++17 -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -Imain     tests/test_netease_dsp.cc -o "$test_dir/netease-dsp"
-"$test_dir/netease-dsp"
+"${CXX:-c++}" -std=c++17 -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -Imain     tests/test_speaker_dsp.cc -o "$test_dir/speaker-dsp"
+"$test_dir/speaker-dsp"
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined -Imain \
     -Itests/registry_mocks tests/test_netease_performance.cc main/apps/netease/netease_json.cc -o "$test_dir/netease-performance"
 "$test_dir/netease-performance"

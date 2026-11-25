@@ -74,10 +74,10 @@ constexpr char kTag[] = "app_home";
 #define kPhos (ui_theme_color_on_dark(UI_COLOR_TEXT))
 #define kPhosDim (ui_theme_color_on_dark(UI_COLOR_TEXT_DIM))
 #define kPhosBorder (ui_theme_color_on_dark(UI_COLOR_BORDER))
-#define kClock (ui_theme_get() == UI_THEME_NEON ? UI_ACCENT : ui_theme_get() == UI_THEME_PLAYFUL ? ui_theme_color_on_dark(UI_COLOR_SECONDARY) : kPhos)
-#define kBand (ui_theme_get() == UI_THEME_NEON ? UI_SECONDARY : ui_theme_get() == UI_THEME_PLAYFUL ? ui_theme_color_on_dark(UI_COLOR_SUCCESS) : UI_AMBER)
+#define kClock (ui_theme_get() == UI_THEME_NEON || ui_theme_is_studio() ? UI_ACCENT : ui_theme_get() == UI_THEME_PLAYFUL ? ui_theme_color_on_dark(UI_COLOR_SECONDARY) : kPhos)
+#define kBand (ui_theme_get() == UI_THEME_NEON || ui_theme_is_studio() ? UI_SECONDARY : ui_theme_get() == UI_THEME_PLAYFUL ? ui_theme_color_on_dark(UI_COLOR_SUCCESS) : UI_AMBER)
 #define kTemperature (ui_theme_is_multicolor() ? ui_theme_color_on_dark(UI_COLOR_TERTIARY) : kPhos)
-#define kWeatherAccent (ui_theme_color_on_dark(ui_theme_get() == UI_THEME_NEON ? UI_COLOR_SUCCESS : UI_COLOR_ACCENT))
+#define kWeatherAccent (ui_theme_color_on_dark(ui_theme_get() == UI_THEME_NEON || ui_theme_is_studio() ? UI_COLOR_SUCCESS : UI_COLOR_ACCENT))
 
 // 兼容既有更新函数的语义色:磷光风格里"强调/在线"都是亮绿,弱化都是暗绿。
 #define kText (kPhos)
@@ -98,7 +98,10 @@ constexpr int64_t kWeatherFirstDelayMs = 15000;
 // 空气质量模型更新慢,保持 30 分钟,不增加 TLS 请求次数。
 constexpr int64_t kWeatherPeriodMs = 900000;
 constexpr int64_t kAirPeriodMs = 1800000;
-// 失败(信号差/热点刚连上)后 2 分钟再试,而不是干等 30 分钟。
+// 失败(信号差/热点刚连上)后先 30 秒快速重试两次,仍失败再每 2 分钟一次,
+// 避免亮屏的一分钟内一直显示"暂无",也不在断网时频繁握手。
+constexpr int64_t kWeatherQuickRetryMs = 30000;
+constexpr int kWeatherQuickRetries = 2;
 constexpr int64_t kWeatherRetryMs = 120000;
 // 超过 2 小时的天气在风级行改为显示"几小时前更新",户外断网时不把旧数据当实时。
 constexpr int64_t kWeatherStaleSec = 7200;
@@ -109,6 +112,7 @@ constexpr int64_t kUploadTimeoutMs = 600000;
 struct WeatherSchedule {
     static constexpr unsigned Weather = 1, Air = 2, Both = Weather | Air;
     int64_t weather_due_ms = -1, air_due_ms = -1;
+    int weather_failures = 0;
     char lat[HOME_COORD_MAX]{}, lon[HOME_COORD_MAX]{};
 
     unsigned due(int64_t now, int64_t entered, bool force, const home_profile_t &profile) const {
@@ -127,10 +131,18 @@ struct WeatherSchedule {
     }
 
     void finish(unsigned request, int64_t now, esp_err_t result) {
-        const int64_t next = now + (request == Air ? kAirPeriodMs
-                                    : result != ESP_OK ? kWeatherRetryMs : kWeatherPeriodMs);
-        if (request == Weather) weather_due_ms = next;
-        else air_due_ms = next;
+        if (request == Air) {
+            air_due_ms = now + kAirPeriodMs;
+            return;
+        }
+        if (result == ESP_OK) {
+            weather_failures = 0;
+            weather_due_ms = now + kWeatherPeriodMs;
+            return;
+        }
+        ++weather_failures;
+        weather_due_ms = now + (weather_failures <= kWeatherQuickRetries
+                                ? kWeatherQuickRetryMs : kWeatherRetryMs);
     }
 };
 WeatherSchedule s_weather_schedule;
@@ -432,12 +444,18 @@ void draw_digit_event(lv_event_t *event) {
     ink.bg_opa = LV_OPA_COVER;
     int idx = kDashGlyphIdx;
     if (c >= '0' && c <= '9') idx = c - '0';
+    // The panel is refreshed in 12-row bands; only queue dots inside this band.
+    lv_layer_t *layer = lv_event_get_layer(event);
+    const lv_area_t clip = layer->_clip_area;
     for (int r = 0; r < 7; ++r) {
+        const int y = origin.y1 + r * kCell;
+        if (y > clip.y2) break;
+        if (y + kDot - 1 < clip.y1) continue;
         for (int col = 0; col < 5; ++col) {
             if (kDigitGlyphs[idx][r] & (0x10 >> col)) {
-                const int x = origin.x1 + col * kCell, y = origin.y1 + r * kCell;
+                const int x = origin.x1 + col * kCell;
                 const lv_area_t dot = {x, y, x + kDot - 1, y + kDot - 1};
-                lv_draw_rect(lv_event_get_layer(event), &ink, &dot);
+                lv_draw_rect(layer, &ink, &dot);
             }
         }
     }
@@ -674,24 +692,38 @@ void draw_passport_details(lv_event_t *event) {
     pixel_scene::Ink ink(event);
     // Open portrait and perforated seam replace retained decoration objects.
     const uint32_t surface = ui_theme_color_on_dark(UI_COLOR_SURFACE);
-    ink.box(116, 32, 118, 93, surface);
-    ink.box(116, 128, 118, 108, surface);
+    const bool studio = ui_theme_is_studio();
+    if (studio) {
+        ink.rbox(116, 32, 118, 93, surface, 8, kPhosBorder, 1);
+        ink.rbox(116, 128, 118, 108, surface, 8, kPhosBorder, 1);
+    } else {
+        ink.box(116, 32, 118, 93, surface);
+        ink.box(116, 128, 118, 108, surface);
+    }
     // 9x12 outlined map pin: stepped crown, open center and tapered tip.
     // Center y=110.5 matches the visible city glyphs (y=104..117).
     // Draw with the page, avoiding two retained decoration objects.
-    ink.box(kInfoLeft + 2, 105, 5, 1, kPhos);
-    ink.box(kInfoLeft + 1, 106, 1, 1, kPhos); ink.box(kInfoLeft + 7, 106, 1, 1, kPhos);
-    ink.box(kInfoLeft + 0, 107, 1, 4, kPhos); ink.box(kInfoLeft + 8, 107, 1, 4, kPhos);
+    const uint32_t pin = studio ? UI_SECONDARY : kPhos;
+    ink.box(kInfoLeft + 2, 105, 5, 1, pin);
+    ink.box(kInfoLeft + 1, 106, 1, 1, pin); ink.box(kInfoLeft + 7, 106, 1, 1, pin);
+    ink.box(kInfoLeft + 0, 107, 1, 4, pin); ink.box(kInfoLeft + 8, 107, 1, 4, pin);
     ink.box(kInfoLeft + 3, 108, 3, 2, kPhosDim);
-    ink.box(kInfoLeft + 1, 111, 1, 1, kPhos); ink.box(kInfoLeft + 7, 111, 1, 1, kPhos);
-    ink.box(kInfoLeft + 2, 112, 1, 1, kPhos); ink.box(kInfoLeft + 6, 112, 1, 1, kPhos);
-    ink.box(kInfoLeft + 3, 113, 1, 1, kPhos); ink.box(kInfoLeft + 5, 113, 1, 1, kPhos);
-    ink.box(kInfoLeft + 4, 114, 1, 3, kPhos);
+    ink.box(kInfoLeft + 1, 111, 1, 1, pin); ink.box(kInfoLeft + 7, 111, 1, 1, pin);
+    ink.box(kInfoLeft + 2, 112, 1, 1, pin); ink.box(kInfoLeft + 6, 112, 1, 1, pin);
+    ink.box(kInfoLeft + 3, 113, 1, 1, pin); ink.box(kInfoLeft + 5, 113, 1, 1, pin);
+    ink.box(kInfoLeft + 4, 114, 1, 3, pin);
     for (int y = 34; y < 234; y += 8) ink.box(110, y, 1, 3, kPhosBorder);
     ink.box(14, 32, 14, 2, kPhosBorder); ink.box(14, 32, 2, 12, kPhosBorder);
     ink.box(88, 158, 14, 2, kPhosBorder); ink.box(100, 148, 2, 12, kPhosBorder);
-    ink.box(14, 172, 24, 2, kPhos);
-    ink.box(42, 172, 60, 1, kPhosBorder);
+    if (studio) {
+        ink.rbox(14, 172, 22, 3, UI_ACCENT, 1);
+        ink.rbox(40, 172, 12, 3, UI_SECONDARY, 1);
+        ink.rbox(56, 172, 8, 3, UI_TERTIARY, 1);
+        ink.box(68, 173, 34, 1, kPhosBorder);
+    } else {
+        ink.box(14, 172, 24, 2, kPhos);
+        ink.box(42, 172, 60, 1, kPhosBorder);
+    }
     for (int i = 0; i < 18; ++i) ink.box(14 + i * 5, 226, i % 3 ? 1 : 2, i % 4 ? 5 : 8, kPhosBorder);
     ink.box(120, 162, 110, 1, kPhosBorder);
 }
@@ -1086,6 +1118,10 @@ void home_task(void *arg) {
                 refresh_weather_ui();
                 bsp_lvgl_unlock();
             }
+            // 首页平时用 MAX modem sleep(约 1 秒才收一次下行),TLS 多次往返会
+            // 把建连拖到接近超时。请求期间临时切到 MIN modem,结束即恢复;
+            // 应用切换会等本任务退出后再设置下一个应用的档位。
+            WifiManager::GetInstance().SetPowerSaveLevel(WifiPowerSaveLevel::BALANCED);
             if (requests & WeatherSchedule::Weather) {
                 const auto result = home_weather_refresh(prof.lat, prof.lon); // 阻塞数秒,不持锁
                 if (s_home_active.load()) s_weather_schedule.finish(WeatherSchedule::Weather, esp_timer_get_time() / 1000, result);
@@ -1094,6 +1130,8 @@ void home_task(void *arg) {
                 const auto result = home_air_quality_refresh(prof.lat, prof.lon);
                 if (s_home_active.load()) s_weather_schedule.finish(WeatherSchedule::Air, esp_timer_get_time() / 1000, result);
             }
+            WifiManager::GetInstance().SetPowerSaveLevel(
+                home_upload_active() ? WifiPowerSaveLevel::BALANCED : WifiPowerSaveLevel::LOW_POWER);
             s_weather_fetching = false;
             if (!s_home_active.load()) break;
             // 无论成败都要刷新一次:成功换天气图标,失败把 spinner 撤下来

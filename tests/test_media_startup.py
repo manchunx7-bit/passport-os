@@ -128,7 +128,8 @@ gates = r'''
 #include <initializer_list>
 #define pdMS_TO_TICKS(x) (x)
 struct Buffer {std::size_t bytes;std::size_t available(){return bytes;}};
-struct Reader {std::atomic<bool> finished;Buffer buffer;};
+struct Source {bool complete() const {return true;}};
+struct Reader {std::atomic<bool> finished;Buffer buffer;Source source{};};
 static Reader *active;static unsigned waits;
 static void vTaskDelay(unsigned){assert(++waits<8);active->buffer.bytes+=4096;}
 '''
@@ -140,7 +141,7 @@ for name, path, marker in (
     start = player.index('const bool finished = reader.finished.load')
     end = player.index(marker, start)
     gates += f'bool {name}(size_t bytes,bool finished){{Reader reader{{finished,{{bytes}}}};active=&reader;waits=0;'
-    gates += 'constexpr size_t capacity=16384;bool buffering=true;while(true){'
+    gates += 'constexpr size_t capacity=16384;bool buffering=true;[[maybe_unused]] bool reached_end=false;while(true){'
     gates += player[start:end] + 'return true;}return false;}\n'
 gates += r'''
 int main(){

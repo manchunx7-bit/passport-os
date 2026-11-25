@@ -21,6 +21,7 @@ static bool fail_air_http;
 static int air_http_status=200;
 static int64_t now_us;
 static bool stalled_request,cancel_on_delay,incomplete_body;
+static const char *stall_host;
 int64_t esp_timer_get_time(void) { return now_us; }
 void vTaskDelay(unsigned ticks) { now_us+=(int64_t)ticks*1000;if(cancel_on_delay){cancel_on_delay=false;home_weather_cancel_requests();} }
 static home_profile_t zhuhai;
@@ -67,7 +68,7 @@ esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *c)
 int esp_http_client_get_status_code(esp_http_client_handle_t c) { return c->air?air_http_status:200; }
 esp_err_t esp_http_client_perform(esp_http_client_handle_t c) {
     if(fail_http||(c->air&&fail_air_http))return ESP_FAIL;
-    if(stalled_request)return ESP_ERR_HTTP_EAGAIN;
+    if(stalled_request||(stall_host&&strstr(c->config.url,stall_host)))return ESP_ERR_HTTP_EAGAIN;
     if(!c->connected){
         c->connected=true;esp_http_client_event_t connected={.event_id=HTTP_EVENT_ON_CONNECTED,.user_data=c->config.user_data,.client=c};
         assert(c->config.event_handler(&connected)==ESP_OK);assert(c->config.timeout_ms==500);
@@ -186,9 +187,28 @@ int main(int argc,char **argv) {
     char tiny[4];home_air_quality_label(true,tiny,sizeof(tiny));assert(tiny[3]==0);
     air_response=good_air;
     incomplete_body=true;assert(home_air_quality_refresh(zhuhai.lat,zhuhai.lon)==ESP_FAIL);assert(!home_air_quality_get(&air));incomplete_body=false;
-    stalled_request=true;int64_t start=now_us;assert(home_air_quality_refresh(zhuhai.lat,zhuhai.lon)==ESP_FAIL);assert(now_us-start==15000000&&http_active==0);
+    stalled_request=true;int64_t start=now_us;assert(home_air_quality_refresh(zhuhai.lat,zhuhai.lon)==ESP_FAIL);assert(now_us-start==30000000&&http_active==0);
     cancel_on_delay=true;start=now_us;assert(home_air_quality_refresh(zhuhai.lat,zhuhai.lon)==ESP_FAIL);assert(now_us-start==20000&&http_active==0);
     before=http_count;assert(home_weather_refresh(zhuhai.lat,zhuhai.lon)==ESP_FAIL);assert(http_count==before && "cancelled weather must not create a client");
+    home_weather_allow_requests();stalled_request=false;
+    // A geo-DNS weather node that never connects must not hide the weather:
+    // each host gets half of the budget, and the working host is tried first next time.
+    stall_host="//api.open-meteo.com/";before=http_count;start=now_us;
+    assert(home_weather_refresh(zhuhai.lat,zhuhai.lon)==ESP_OK);
+    assert(http_count==before+2&&now_us-start>=15000000&&now_us-start<16000000&&http_active==0);
+    assert(strstr(last_url,"https://historical-forecast-api.open-meteo.com/v1/forecast?latitude=22.2707&longitude=113.5767&current="));
+    before=http_count;assert(home_weather_refresh(zhuhai.lat,zhuhai.lon)==ESP_OK);
+    assert(http_count==before+1&&strstr(last_url,"//historical-forecast-api.open-meteo.com/"));
+    stall_host="//historical-forecast-api.open-meteo.com/";before=http_count;
+    assert(home_weather_refresh(zhuhai.lat,zhuhai.lon)==ESP_OK);
+    assert(http_count==before+2&&strstr(last_url,"//api.open-meteo.com/"));
+    stall_host=NULL;
+    stalled_request=true;before=http_count;start=now_us;
+    assert(home_weather_refresh(zhuhai.lat,zhuhai.lon)==ESP_FAIL);
+    assert(http_count==before+2&&now_us-start==30000000&&http_active==0);
+    // Leaving Home during the first host must not start the fallback.
+    cancel_on_delay=true;before=http_count;
+    assert(home_weather_refresh(zhuhai.lat,zhuhai.lon)==ESP_FAIL&&http_count==before+1&&http_active==0);
     home_weather_allow_requests();stalled_request=false;
     assert(home_profile_set_text(&beijing)==ESP_OK);switch_city=true;
     assert(home_air_quality_refresh(beijing.lat,beijing.lon)==ESP_OK);assert(!home_air_quality_get(&air));

@@ -162,6 +162,27 @@ companion ──beacon(1s)──► 设备
 
 下行（电脑→设备）只有 `type=0x02` EVENT：`transcript` / `agent.status` /
 `agent.approval_request` / `time.set`，全部经 `app_protocol_parse()` 投事件，与 BLE 完全一致。
+热键转发器另有 `pc.status`（每秒一次的就绪心跳）与 `pc.ptt`（见 5.1）。
+
+### 5.1 电脑键盘按住热键开麦（`pc.ptt`，2026-11-21）
+
+在电脑上按住输入法热键，设备即开麦，把设备当成电脑麦克风；设备上键原用法不变。
+
+```
+电脑 companion                                 设备
+ 按住热键满 0.2s（期间无其他键）
+ ── {"type":"pc.ptt","active":true} ──►        READY 且 link_up 且 pc_ready → 开麦
+                                               ◄── voice.start + AUDIO ×N
+ 按住期间每 0.5s 续期 active:true ─────►        刷新续期时刻
+ 松开 ── active:false ×2 ─────────────►         关麦（排空）→ voice.end
+```
+
+- `active` 必须是 JSON 布尔，缺失/其他类型丢弃。
+- 设备 `APP_PC_PTT_TIMEOUT_MS`（1500 ms）收不到续期即自动关麦，防止关麦帧丢失或电脑程序卡死时麦克风常开。
+- 设备上键会话期间忽略 `pc.ptt`；电脑会话期间上键松开不打断。`pc.status` 未就绪或链路断开照常取消会话。
+- 达到 10 分钟上限后，须先收到 `active:false`（松开热键）才能再次开麦。
+- companion 默认 `pc_trigger=hotkey`：用户直接按住输入法热键，输入法由真实按键调起、松开即结束，companion 不注入（仅 hold 模式）。
+  可选 `pc_trigger=space`（全局钩子拦截长按空格，由 companion 注入热键），实测可靠性较差。设备侧协议两者相同。
 
 ---
 

@@ -63,11 +63,11 @@ int main() {
     mock_largest=17408;assert(a.PrepareSessionResources());assert(a.ReleaseSessionResources());
     a.SetPlaybackSampleRate(24000);assert(a.PrepareSessionResources());assert(a.ReleaseSessionResources());
     assert(live_bytes()==boot_bytes);mock_largest=100000;
-    mock_fail_size=3072;
+    mock_fail_size=6144;
     assert(!a.PrepareSessionResources());assert(a.ReleaseSessionResources());
     assert(live_bytes()==boot_bytes);mock_fail_size=-1;
     assert(a.PrepareSessionResources());const size_t session_bytes=live_bytes();
-    assert(session_bytes==6976); // codec state and worker stack use fixed storage
+    assert(session_bytes==10048); // codec state and worker stack use fixed storage
     mock_format_fail=ESP_FAIL;assert(!a.StartRecording());mock_format_fail=0;
     // Ordinary turns reuse every allocation. Pending worker work blocks format
     // changes and frees, avoiding buffer sharing while an old worker is alive.
@@ -96,7 +96,9 @@ int main() {
     // A successfully written decoded frame publishes its amplitude; mute and
     // abort cannot keep a phantom waveform running.
     a.play_stop_=false;a.PushIncomingAudio(frame,sizeof(frame));
-    for(size_t i=0;i<xiaozhi::kMaxPcmFrameBytes/2;++i)capture[i]=4096;
+    // Playback passes the shared speaker high-pass, so use audible content
+    // (1 kHz square at 24 kHz) rather than DC, which the filter removes.
+    for(size_t i=0;i<xiaozhi::kMaxPcmFrameBytes/2;++i)capture[i]=(i/12)%2?4096:-4096;
     a.PlaySection();assert(a.VisualLevel()>0);
     mock_master_volume=0;a.PushIncomingAudio(frame,sizeof(frame));
     a.PlaySection();assert(a.VisualLevel()==0);mock_master_volume=100;

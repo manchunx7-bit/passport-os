@@ -31,6 +31,8 @@ static const char *TAG = "app_registry";
 
 // 外部 App 实例前向声明
 extern const passport_app_t g_radio_app;
+extern const passport_app_t g_podcast_app;
+extern const passport_app_t g_audiobook_app;
 extern const passport_app_t g_voice_app;
 extern const passport_app_t g_xiaozhi_app;
 extern const passport_app_t g_wifi_app;
@@ -56,6 +58,8 @@ const passport_app_t *s_apps[] = {
     &g_xiaozhi_app,
     &g_radio_app,
     &g_netease_app,
+    &g_podcast_app,
+    &g_audiobook_app,
     &g_voice_app,
     &g_muse_app,
     &g_pomodoro_app,
@@ -103,6 +107,8 @@ struct SwitchGuard {
 WifiPowerSaveLevel power_save_level_for(passport_app_id_t id) {
     switch (id) {
         case APP_ID_RADIO:
+        case APP_ID_PODCAST:
+        case APP_ID_AUDIOBOOK:
         case APP_ID_NETEASE:
         case APP_ID_VOICE:
         case APP_ID_XIAOZHI:
@@ -132,6 +138,8 @@ struct HeapNeed {
 // 会话内音乐搜索另有自身预检(24 KiB);Muse 工作任务栈 12 KiB 加 TLS 8 KiB。
 HeapNeed heap_need(passport_app_id_t id) {
     switch (id) {
+        case APP_ID_PODCAST:
+        case APP_ID_AUDIOBOOK:
         case APP_ID_RADIO: return {24 * 1024, 48 * 1024};
         // Same MP3 decoder as Radio; logged-in requests add TLS only while it is closed.
         case APP_ID_NETEASE: return {24 * 1024, 48 * 1024};
@@ -149,7 +157,8 @@ bool s_heap_strained = false;
 bool s_fresh_heap = false;
 
 bool heavy_app(passport_app_id_t id) {
-    return id == APP_ID_RADIO || id == APP_ID_NETEASE || id == APP_ID_XIAOZHI || id == APP_ID_MUSE;
+    return id == APP_ID_RADIO || id == APP_ID_PODCAST || id == APP_ID_AUDIOBOOK ||
+           id == APP_ID_NETEASE || id == APP_ID_XIAOZHI || id == APP_ID_MUSE;
 }
 
 // 在旧应用 stop() 之后调用:此时测到的才是新应用可用的堆。

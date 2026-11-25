@@ -9,7 +9,7 @@
 #include <functional>
 static passport_app_id_t foreground=APP_ID_XIAOZHI;
 static bool navigation_pending=false, mock_alarm=false;
-static unsigned switches=0, ui_volume=0;
+static unsigned switches=0, ui_volume=0, theme_refreshes=0;
 static bool display_locked=false, display_available=true, screen_on=false;
 bool bsp_lvgl_lock(int){if(!display_available)return false;display_locked=true;return true;}
 void bsp_lvgl_unlock(){assert(display_locked);display_locked=false;}
@@ -20,7 +20,35 @@ extern "C" const passport_app_t *app_registry_get_by_id(passport_app_id_t id){
     static passport_app_t app{};return id>APP_ID_LAUNCHER&&id<APP_ID_COUNT?&app:nullptr;
 }
 extern "C" void app_registry_switch_to(passport_app_id_t id){++switches;foreground=id;}
-namespace xiaozhi {void ui_set_volume(unsigned value){ui_volume=value;}}
+namespace xiaozhi {
+void ui_set_volume(unsigned value){ui_volume=value;}
+void ui_refresh_theme(){++theme_refreshes;}
+}
+static home_profile_t mock_profile={"Mach","保持好奇","珠海","广东省珠海市","22.27","113.57","广东省","珠海","CN"};
+extern "C" {
+void home_profile_get(home_profile_t *out){*out=mock_profile;}
+esp_err_t home_profile_set_text(const home_profile_t *in){
+    if(fail_write)return ESP_FAIL;
+    if(!in||strlen(in->name)>=HOME_NAME_MAX||strlen(in->signature)>=HOME_SIGNATURE_MAX)return ESP_ERR_INVALID_SIZE;
+    mock_profile=*in;return ESP_OK;
+}
+static home_weather_t mock_weather{true,21,3,68,12,45,1700000000};
+static home_air_quality_t mock_air{true,194};
+bool home_weather_get(home_weather_t *out){if(!mock_weather.valid)return false;*out=mock_weather;return true;}
+bool home_air_quality_get(home_air_quality_t *out){if(!mock_air.valid)return false;*out=mock_air;return true;}
+const char *home_weather_code_text(uint16_t code){return code==3?"阴":"晴";}
+}
+namespace audiobook {
+static std::vector<ShelfItem> mock_shelf{
+    {3,120,false,"三体全集"},
+    {50,50,true,"明朝那些事儿"},
+};
+size_t read_shelf_summary(ShelfItem *out,size_t cap){
+    size_t n=std::min(cap,mock_shelf.size());
+    for(size_t i=0;i<n;++i)out[i]=mock_shelf[i];
+    return n;
+}
+}
 static pomodoro_t voice_timer=POMODORO_INITIALIZER;
 bool pomodoro_control(pomodoro_action_t action,uint8_t phase,PomodoroSnapshot *out,pomodoro_command_result_t *result){
     if(!display_available)return false;
@@ -210,11 +238,11 @@ int main(){
     answer=invoke("self.audio.set_volume",R"({"percent":90})");assert(answer.find("\"isError\":true")!=std::string::npos);
     poll();assert(s_volume==0);mock_delay_hook=poll;
     bool rpc_error=false;
-    for(unsigned page=0;page<20;++page){
+    for(unsigned page=0;page<25;++page){
         auto out=reminders::mcp_result("tools/list",("{\"cursor\":\""+std::to_string(page)+"\"}").c_str(),&rpc_error);
         auto *json=cJSON_Parse(out.c_str());assert(!rpc_error&&cJSON_GetArraySize(cJSON_GetObjectItem(json,"tools"))==1);
         assert(out.size()<1800); // each tool page fits the real receive limit
-        assert(bool(cJSON_GetObjectItem(json,"nextCursor"))==(page<19));cJSON_Delete(json);
+        assert(bool(cJSON_GetObjectItem(json,"nextCursor"))==(page<24));cJSON_Delete(json);
     }
     answer=invoke("self.pomodoro.control",R"({"action":"start"})");
     assert(answer.find("running")!=std::string::npos&&answer.find("1500")!=std::string::npos&&foreground==APP_ID_XIAOZHI);
@@ -232,5 +260,101 @@ int main(){
     display_available=false;
     answer=invoke("self.pomodoro.control",R"({"action":"reset"})");assert(answer.find("\"isError\":true")!=std::string::npos&&voice_timer.status==POMODORO_RUNNING);
     display_available=true;invoke("self.pomodoro.control",R"({"action":"reset"})");assert(voice_timer.status==POMODORO_READY);
-    puts("Device control: saved settings, guarded navigation, voice pomodoro validation/state, timeout, voice music/radio handover, in-session search, low-battery brightness, AIHOT news and twenty-tool discovery PASS");
+    // Podcast handover accepts supported modes, optional stop timer, and waits for reply.
+    for (const auto *args : {R"({})", R"({"source":"daily"})", R"({"source":"search"})",
+                             R"({"source":"hot","query":"FM"})", R"({"source":"recommended","latest":1})",
+                             R"({"source":"hot","stop_after_minutes":0})",
+                             R"({"source":"hot","stop_after_minutes":181})"}) {
+        answer=invoke("self.podcast.play",args,90);
+        assert(answer.find("\"isError\":true")!=std::string::npos);
+    }
+    answer=invoke("self.podcast.play",R"({"source":"search","query":"声动早咖啡","latest":true,"stop_after_minutes":30})",91);
+    assert(answer.find("target_app\\\":\\\"podcast")!=std::string::npos);
+    assert(answer.find("playback_confirmed\\\":false")!=std::string::npos);
+    assert(answer.find("stop_after_minutes\\\":30")!=std::string::npos);
+    assert(armed.app==APP_ID_PODCAST && armed.source==Source::PodcastSearch && armed.podcast_latest &&
+           armed.stop_minutes==30 && !strcmp(armed.name,"声动早咖啡"));
+    poll(); assert(foreground==APP_ID_XIAOZHI);
+    response_sent(91,true);poll();monotonic_us+=300000;poll();assert(foreground==APP_ID_PODCAST);
+    foreground=APP_ID_XIAOZHI;
+    invoke("self.podcast.play",R"({"source":"hot"})",92);
+    assert(armed.source==Source::PodcastHot && !armed.podcast_latest && armed.stop_minutes==0);
+    invoke("self.podcast.play",R"({"source":"recommended"})",93);
+    assert(armed.source==Source::PodcastRecommended);
+    cancel_session();poll();assert(armed.source==Source::None);
+    // Audiobook handover supports search, resume, hot and optional bedtime timer.
+    for (const auto *args : {R"({})", R"({"source":"recommended"})", R"({"source":"search"})",
+                             R"({"source":"hot","query":"三体"})", R"({"source":"resume","stop_after_minutes":0})",
+                             R"({"source":"resume","stop_after_minutes":240})"}) {
+        answer=invoke("self.audiobook.play",args,94);
+        assert(answer.find("\"isError\":true")!=std::string::npos);
+    }
+    answer=invoke("self.audiobook.play",R"({"source":"search","query":"盗墓笔记","stop_after_minutes":30})",95);
+    assert(answer.find("target_app\\\":\\\"audiobook")!=std::string::npos);
+    assert(answer.find("playback_confirmed\\\":false")!=std::string::npos);
+    assert(armed.app==APP_ID_AUDIOBOOK && armed.source==Source::AudiobookSearch &&
+           armed.stop_minutes==30 && !strcmp(armed.name,"盗墓笔记"));
+    poll(); assert(foreground==APP_ID_XIAOZHI);
+    response_sent(95,true);poll();monotonic_us+=300000;poll();assert(foreground==APP_ID_AUDIOBOOK);
+    foreground=APP_ID_XIAOZHI;
+    invoke("self.audiobook.play",R"({"source":"resume"})",96);
+    assert(armed.app==APP_ID_AUDIOBOOK && armed.source==Source::AudiobookResume && armed.stop_minutes==0);
+    invoke("self.audiobook.play",R"({"source":"hot"})",97);
+    assert(armed.source==Source::AudiobookHot);
+    cancel_session();poll();assert(armed.source==Source::None);
+    // Profile update edits name and/or signature while keeping city/coordinates intact.
+    for (const auto *bad : {R"({})", R"({"city":"北京"})", R"({"name":123})", R"({"name":"a\nb"})",
+                            R"({"name":"一二三四五六七八九十十一"})"}) {
+        answer=invoke("self.profile.update",bad,98);
+        assert(answer.find("\"isError\":true")!=std::string::npos);
+    }
+    answer=invoke("self.profile.update",R"({"name":"小智朋友","signature":"天天开心"})",99);
+    assert(answer.find("\"isError\":false")!=std::string::npos&&answer.find("saved\\\":true")!=std::string::npos);
+    assert(!strcmp(mock_profile.name,"小智朋友")&&!strcmp(mock_profile.signature,"天天开心")&&
+           !strcmp(mock_profile.city,"珠海")&&!strcmp(mock_profile.lat,"22.27"));
+    invoke("self.profile.update",R"({"signature":""})",100);
+    assert(!strcmp(mock_profile.name,"小智朋友")&&!mock_profile.signature[0]);
+    fail_write=true;
+    answer=invoke("self.profile.update",R"({"name":"失败测试"})",101);
+    assert(answer.find("\"isError\":true")!=std::string::npos&&!strcmp(mock_profile.name,"小智朋友"));
+    fail_write=false;
+    // Settings update persists theme, screen timeout and key sound with live UI refresh.
+    for (const auto *bad : {R"({})", R"({"theme":"dark"})", R"({"screen_timeout_seconds":45})",
+                            R"({"key_sound":"yes"})", R"({"theme":"studio","extra":1})"}) {
+        answer=invoke("self.settings.update",bad,102);
+        assert(answer.find("\"isError\":true")!=std::string::npos);
+    }
+    const unsigned before_refreshes=theme_refreshes;
+    answer=invoke("self.settings.update",R"({"theme":"studio","screen_timeout_seconds":120,"key_sound":false})",103);
+    assert(answer.find("saved\\\":true")!=std::string::npos&&answer.find("曜石工坊")!=std::string::npos);
+    assert(s_theme==UI_THEME_STUDIO&&applied_theme==UI_THEME_STUDIO&&s_timeout==120&&!mock_key_sound&&
+           theme_refreshes==before_refreshes+1);
+    s_theme=UI_THEME_CLASSIC;s_timeout=60;mock_key_sound=true;settings_bootstrap();
+    assert(s_theme==UI_THEME_STUDIO&&s_timeout==120&&!mock_key_sound);
+    invoke("self.settings.update",R"({"screen_timeout_seconds":0})",104);assert(s_timeout==0);
+    fail_write=true;
+    answer=invoke("self.settings.update",R"({"theme":"classic"})",105);
+    assert(answer.find("\"isError\":true")!=std::string::npos&&s_theme==UI_THEME_STUDIO);
+    fail_write=false;
+    // Status returns battery, theme, timeout, key sound, profile and cached weather/PM2.5.
+    answer=invoke("self.device.get_status","{}",106);
+    assert(answer.find("battery_percent\\\":80")!=std::string::npos&&answer.find("曜石工坊")!=std::string::npos&&
+           answer.find("screen_timeout_seconds\\\":0")!=std::string::npos&&
+           answer.find("key_sound\\\":false")!=std::string::npos&&
+           answer.find("小智朋友")!=std::string::npos&&answer.find("temp_c\\\":21")!=std::string::npos&&
+           answer.find("pm25\\\":19.4")!=std::string::npos);
+    mock_weather.valid=false;mock_air.valid=false;mock_soc=-1;
+    answer=invoke("self.device.get_status","{}",107);
+    assert(answer.find("battery_percent")==std::string::npos&&answer.find("weather_cached\\\":false")!=std::string::npos);
+    mock_weather.valid=true;mock_air.valid=true;mock_soc=80;
+    // Audiobook shelf summary lists books and rejects unexpected arguments.
+    answer=invoke("self.audiobook.shelf",R"({"extra":1})",108);
+    assert(answer.find("\"isError\":true")!=std::string::npos);
+    answer=invoke("self.audiobook.shelf","{}",109);
+    assert(answer.find("\"isError\":false")!=std::string::npos&&answer.find("count\\\":2")!=std::string::npos&&
+           answer.find("三体全集")!=std::string::npos&&answer.find("明朝那些事儿")!=std::string::npos);
+    audiobook::mock_shelf.clear();
+    answer=invoke("self.audiobook.shelf","{}",110);
+    assert(answer.find("count\\\":0")!=std::string::npos);
+    puts("Device control: saved settings, profile/settings updates, shelf query, guarded navigation, voice pomodoro validation/state, timeout, voice music/radio/podcast/audiobook handover, in-session search, battery/weather status, AIHOT news and 25-tool discovery PASS");
 }

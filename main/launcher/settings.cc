@@ -182,7 +182,7 @@ void create_ui() {
         s_rows[i] = lv_obj_create(s_screen);
         lv_obj_set_size(s_rows[i], 216, 27);
         lv_obj_set_pos(s_rows[i], 12, y);
-        lv_obj_set_style_radius(s_rows[i], 0, 0);
+        lv_obj_set_style_radius(s_rows[i], ui_theme_is_studio() ? 6 : 0, 0);
         lv_obj_set_style_bg_color(s_rows[i], lv_color_hex(UI_PAPER), 0);
         lv_obj_set_style_bg_opa(s_rows[i], LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(s_rows[i], 0, 0);
@@ -201,7 +201,8 @@ void create_ui() {
     }
 
     s_help = ui_pixel_label(s_screen, "", &buddy_font_16, UI_TEXT_DIM);
-    lv_obj_set_pos(s_help, 12, 244); lv_obj_set_size(s_help, 216, 22);
+    // Aligned with the row labels (row x 12 + 12 px inner padding).
+    lv_obj_set_pos(s_help, 24, 244); lv_obj_set_size(s_help, 192, 22);
     lv_label_set_long_mode(s_help, LV_LABEL_LONG_DOT);
     s_hint = ui_pixel_footer(s_screen, "", "长按确定返回", &buddy_font_16);
     s_confirm = lv_obj_create(s_screen); lv_obj_remove_style_all(s_confirm);
@@ -403,9 +404,23 @@ bool save_percent(const char *key, uint8_t percent) {
     if (result != ESP_OK) ESP_LOGW(kTag, "Failed to save %s: %s", key, esp_err_to_name(result));
     return result == ESP_OK;
 }
+bool save_u16(const char *key, uint16_t value) {
+    nvs_handle_t handle;
+    esp_err_t result = nvs_open(kNvsNamespace, NVS_READWRITE, &handle);
+    if (result == ESP_OK) {
+        result = nvs_set_u16(handle, key, value);
+        if (result == ESP_OK) result = nvs_commit(handle);
+        nvs_close(handle);
+    }
+    if (result != ESP_OK) ESP_LOGW(kTag, "Failed to save %s: %s", key, esp_err_to_name(result));
+    return result == ESP_OK;
+}
 }
 uint8_t settings_get_volume(void) { return s_volume; }
 uint8_t settings_get_brightness(void) { return s_brightness; }
+uint16_t settings_get_timeout(void) { return s_timeout; }
+ui_theme_t settings_get_theme(void) { return s_theme; }
+bool settings_get_key_sound(void) { return ui_sfx_enabled(); }
 bool settings_save_volume(uint8_t percent) {
     if (percent > 100 || !save_percent("volume", percent)) return false;
     s_volume = percent;
@@ -418,6 +433,24 @@ bool settings_save_brightness(uint8_t percent) {
     s_outdoor_until_us = 0;
     s_outdoor_restore = percent;
     bsp_display_set_master_brightness(battery_brightness(bsp_battery_soc(), percent));
+    return true;
+}
+bool settings_save_theme(ui_theme_t theme) {
+    if (theme >= UI_THEME_COUNT || !save_percent("theme", static_cast<uint8_t>(theme))) return false;
+    s_theme = theme;
+    ui_theme_set(theme);
+    return true;
+}
+bool settings_save_timeout(uint16_t seconds) {
+    if (validated(kTimeouts, seconds, static_cast<uint16_t>(0xFFFF)) == 0xFFFF) return false;
+    if (!save_u16("timeout", seconds)) return false;
+    s_timeout = seconds;
+    app_registry_set_screen_timeout(seconds);
+    return true;
+}
+bool settings_save_key_sound(bool enabled) {
+    if (!save_percent("key_sound", enabled ? 1 : 0)) return false;
+    ui_sfx_set_enabled(enabled);
     return true;
 }
 void settings_set_volume(uint8_t percent) {

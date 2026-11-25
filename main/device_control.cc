@@ -2,6 +2,8 @@
 #include "launcher/app_registry.h"
 #include "launcher/settings.h"
 #include "bsp_display.h"
+#include "bsp_battery.h"
+#include "apps/home/home_profile.h"
 #include "apps/reminders/reminder_service.h"
 #include "esp_timer.h"
 #include "esp_log.h"
@@ -9,6 +11,9 @@
 #include "freertos/task.h"
 #include <atomic>
 #include <algorithm>
+#include <cstring>
+#include <memory>
+#include <new>
 
 namespace device_control {
 namespace {
@@ -115,7 +120,7 @@ void poll() {
     }
     int expected = Waiting;
     if (!phase.compare_exchange_strong(expected, Running)) return;
-    const Request command = request;
+    const Request &command = request;
     Result completed;
     if (app_registry_get_active() != APP_ID_XIAOZHI || app_registry_switch_pending()) completed.error = Error::Inactive;
     else if (command.action == Action::Volume || command.action == Action::Brightness) {
@@ -125,6 +130,30 @@ void poll() {
         const auto percent = static_cast<uint8_t>(std::clamp(requested, volume ? 0 : 10, 100));
         const bool saved = volume ? settings_save_volume(percent) : settings_save_brightness(percent);
         if (!saved) completed.error = Error::Storage;
+    } else if (command.action == Action::Settings) {
+        if ((command.has_theme && !settings_save_theme(static_cast<ui_theme_t>(command.theme))) ||
+            (command.has_timeout && !settings_save_timeout(command.timeout)) ||
+            (command.has_key_sound && !settings_save_key_sound(command.key_sound))) {
+            completed.error = Error::Storage;
+        }
+    } else if (command.action == Action::Profile) {
+        std::unique_ptr<home_profile_t> prof(new (std::nothrow) home_profile_t{});
+        if (!prof) {
+            completed.error = Error::Busy;
+        } else {
+            home_profile_get(prof.get());
+            if (command.has_name) {
+                std::memcpy(prof->name, command.profile_name, sizeof(prof->name));
+                prof->name[sizeof(prof->name) - 1] = '\0';
+            }
+            if (command.has_signature) {
+                std::memcpy(prof->signature, command.profile_signature, sizeof(prof->signature));
+                prof->signature[sizeof(prof->signature) - 1] = '\0';
+            }
+            const esp_err_t err = home_profile_set_text(prof.get());
+            if (err == ESP_ERR_INVALID_ARG || err == ESP_ERR_INVALID_SIZE) completed.error = Error::Invalid;
+            else if (err != ESP_OK) completed.error = Error::Storage;
+        }
     } else if (command.action == Action::Pomodoro) {
         pomodoro_command_result_t timer_result = POMODORO_COMMAND_OK;
         if (!pomodoro_control(command.timer_action, command.timer_phase, &completed.timer, &timer_result))
@@ -151,6 +180,11 @@ void poll() {
     completed.volume = settings_get_volume();
     completed.brightness = settings_get_brightness();
     completed.applied_brightness = bsp_display_get_master_brightness();
+    const int soc = bsp_battery_soc();
+    completed.battery = (soc >= 0 && soc <= 100) ? static_cast<int8_t>(soc) : int8_t{-1};
+    completed.theme = static_cast<uint8_t>(settings_get_theme());
+    completed.timeout = settings_get_timeout();
+    completed.key_sound = settings_get_key_sound();
     completed.app = app_registry_get_active();
     result = completed;
     expected = Running;

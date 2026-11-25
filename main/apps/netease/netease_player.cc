@@ -1,7 +1,7 @@
 #include "apps/netease/netease_player.h"
 
 #include "apps/netease/netease_api.h"
-#include "apps/netease/netease_dsp.h"
+#include "speaker_dsp.h"
 
 #include "apps/radio/radio_source.h"
 #include "apps/radio/radio_stream_buffer.h"
