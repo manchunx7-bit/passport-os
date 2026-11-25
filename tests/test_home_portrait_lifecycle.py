@@ -19,27 +19,33 @@ prelude = r'''
 #define HOME_AVATAR_MAX_BYTES 6664
 #define HOME_PORTRAIT_PIXELS 14400
 #define HOME_PORTRAIT_I4_BYTES 7264
+#define HOME_PORTRAIT_RGB565_BYTES (HOME_PORTRAIT_PIXELS * 2)
 #define HOME_PORTRAIT_W 120
 #define LV_COLOR_FORMAT_A8 1
 #define LV_COLOR_FORMAT_I4 2
+#define LV_COLOR_FORMAT_RGB565 3
 #define LV_OBJ_FLAG_HIDDEN 1
 #define ESP_OK 0
 #define ESP_FAIL -1
 #define ESP_ERR_NOT_FOUND -2
 #define ESP_ERR_NO_MEM -3
 #define ESP_LOGW(...) ((void)0)
+#define kBg 0x16171au
 using esp_err_t=int;
 static uint8_t *s_portrait_packed,*s_portrait_pixels;
 static struct {struct {int cf,stride;}header;size_t data_size;const void *data;}s_portrait_dsc;
+static bool s_portrait_rgb565;
 static int image,placeholder;
 static void *s_avatar_img=&image,*s_portrait_ph=&placeholder;
 static const void *displayed;
-static bool hidden=true,fail_read;
+static bool hidden=true,fail_read,mock_rgb565;
 static int allocations,fail_at,version=1;
 static std::set<void*>live;
 static void *allocate(size_t n){if(++allocations==fail_at)return nullptr;void*p=malloc(n);assert(p);live.insert(p);return p;}
 static void release(void*p){if(p){assert(p!=displayed);assert(live.erase(p)==1);free(p);}}
 static inline bool home_portrait_is_color(const uint8_t*d){return d[0]=='P'&&d[1]=='T'&&d[2]=='3'&&d[3]=='6';}
+static bool home_profile_avatar_is_rgb565(){return mock_rgb565;}
+static int home_profile_read_avatar_rgb565(uint8_t*p,size_t n,uint32_t bg){assert(n==HOME_PORTRAIT_RGB565_BYTES&&bg==kBg);if(fail_read)return ESP_FAIL;memset(p,0x3c,n);return ESP_OK;}
 static int home_profile_read_avatar(uint8_t*p,size_t n){assert(n==HOME_AVATAR_MAX_BYTES);if(fail_read)return ESP_FAIL;memset(p,0,n);p[4]=version;return ESP_OK;}
 static void lv_image_set_src(void*,const void*p){displayed=p;}
 static void lv_image_cache_drop(const void*){}
@@ -65,6 +71,16 @@ int main(){
  cleanup();assert(!s_portrait_pixels&&!s_portrait_packed&&!s_portrait_dsc.data&&live.empty());
  cleanup();fail_read=false;version=1;assert(read_portrait(true)==ESP_OK);apply_avatar(true);
  lv_image_set_src(s_avatar_img,nullptr);cleanup();assert(live.empty());
+ // PT37 RGB565 streaming path: single buffer, OOM/read failure, switch PT36<->PT37, clean release.
+ mock_rgb565=true;fail_at=allocations+1;assert(read_portrait(true)==ESP_ERR_NO_MEM);assert(!s_portrait_pixels&&live.empty());
+ fail_at=0;fail_read=true;assert(read_portrait(true)==ESP_FAIL);assert(!s_portrait_pixels&&live.empty());
+ fail_read=false;assert(read_portrait(true)==ESP_OK);apply_avatar(true);
+ assert(!hidden&&s_portrait_dsc.header.cf==LV_COLOR_FORMAT_RGB565&&s_portrait_dsc.data_size==HOME_PORTRAIT_RGB565_BYTES&&!s_portrait_packed&&live.size()==1);
+ mock_rgb565=false;lv_image_set_src(s_avatar_img,nullptr);assert(read_portrait(true)==ESP_OK);apply_avatar(true);
+ assert(!hidden&&s_portrait_dsc.header.cf==LV_COLOR_FORMAT_I4&&s_portrait_dsc.data_size==HOME_PORTRAIT_I4_BYTES&&live.size()==2);
+ mock_rgb565=true;lv_image_set_src(s_avatar_img,nullptr);assert(read_portrait(true)==ESP_OK);apply_avatar(true);
+ assert(!hidden&&s_portrait_dsc.header.cf==LV_COLOR_FORMAT_RGB565&&!s_portrait_packed&&live.size()==1);
+ lv_image_set_src(s_avatar_img,nullptr);cleanup();assert(!s_portrait_pixels&&!s_portrait_packed&&!s_portrait_dsc.data&&!s_portrait_rgb565&&live.empty());
 }
 '''
 with tempfile.TemporaryDirectory() as tmp:

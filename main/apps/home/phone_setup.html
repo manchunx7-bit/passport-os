@@ -143,7 +143,7 @@ input::file-selector-button{min-height:34px;border:0;background:var(--green);col
 <div class="controls-card">
 <div class="slider"><label for="zm" class="caption">缩放</label><input type="range" id="zm" min="100" max="400" step="10" value="100"><span class="slider-value"><input type="number" id="zmValue" min="100" max="400" step="10" value="100" inputmode="numeric" aria-label="缩放数值"><span class="slider-unit">%</span></span><div class="slider-ticks" id="zmTicks" aria-hidden="true"></div></div>
 <div class="slider"><label for="portraitBrightness" class="caption">明暗</label><input type="range" id="portraitBrightness" min="-48" max="48" step="8" value="0"><span class="slider-value"><input type="number" id="portraitBrightnessValue" min="-48" max="48" step="8" value="0" inputmode="numeric" aria-label="明暗数值"><span class="slider-unit"></span></span><div class="slider-ticks" id="portraitBrightnessTicks" aria-hidden="true"></div></div>
-<div class="slider" id="portraitColorRow"><label for="portraitColor" class="caption">颜色</label><input type="range" id="portraitColor" min="0" max="100" step="10" value="50"><span class="slider-value"><input type="number" id="portraitColorValue" min="0" max="100" step="10" value="50" inputmode="numeric" aria-label="颜色保留度"><span class="slider-unit">%</span></span><div class="slider-ticks" id="portraitColorTicks" aria-hidden="true"></div></div>
+<div class="slider" id="portraitColorRow"><label for="portraitColor" class="caption">颜色</label><input type="range" id="portraitColor" min="0" max="100" step="10" value="100"><span class="slider-value"><input type="number" id="portraitColorValue" min="0" max="100" step="10" value="100" inputmode="numeric" aria-label="颜色保留度"><span class="slider-unit">%</span></span><div class="slider-ticks" id="portraitColorTicks" aria-hidden="true"></div></div>
 <label class="check"><input type="checkbox" id="portraitBackground"> 去除纯色背景</label>
 </div></div>
 <p id="avatarStatus" class="status" role="status"></p></div></details>
@@ -367,13 +367,9 @@ function portraitLocalContrast(lum,mask,w,h){
   out[p]=Math.round(v*.8+local*.2);
  }return out;
 }
-function portraitPrepare(data,w,h,removeBackground){
- if(portraitPreparedCache?.data===data&&portraitPreparedCache.removeBackground===removeBackground&&portraitPreparedCache.w===w&&portraitPreparedCache.h===h)return portraitPreparedCache;
- const range=portraitPrepare._r||(portraitPrepare._r=Float32Array.from({length:256},(_,i)=>Math.exp(-i*i/(2*24*24))));
- let kDx=portraitPrepare._dx,kDy=portraitPrepare._dy,kSp=portraitPrepare._sp;
- if(!kDx){kDx=portraitPrepare._dx=new Int8Array(25);kDy=portraitPrepare._dy=new Int8Array(25);kSp=portraitPrepare._sp=new Float32Array(25);let n=0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){kDx[n]=dx;kDy[n]=dy;kSp[n]=Math.exp(-(dx*dx+dy*dy)/(2*1.2*1.2));n++}}
- const count=w*h,background=new Uint8Array(count),lum=new Uint8Array(count),hist=new Uint32Array(256),mask=new Uint8Array(count);
- for(let p=0;p<count;p++){const i=p*4;lum[p]=(data[i]*77+data[i+1]*151+data[i+2]*28)>>8;if(data[i+3]<128)background[p]=1}
+function portraitBackgroundMask(data,w,h,removeBackground){
+ const count=w*h,background=new Uint8Array(count),mask=new Uint8Array(count);
+ for(let p=0;p<count;p++)if(data[p*4+3]<128)background[p]=1;
  if(removeBackground){
   const border=[];for(let x=0;x<w;x++){border.push(x,(h-1)*w+x)}for(let y=1;y<h-1;y++){border.push(y*w,y*w+w-1)}
   const center=[0,1,2].map(c=>{const values=border.map(p=>data[p*4+c]).sort((a,b)=>a-b);return values[values.length>>1]});
@@ -384,10 +380,20 @@ function portraitPrepare(data,w,h,removeBackground){
    border.forEach(visit);while(head<tail){const p=queue[head++],x=p%w;if(x)visit(p-1);if(x<w-1)visit(p+1);if(p>=w)visit(p-w);if(p<count-w)visit(p+w)}
   }
  }
+ for(let p=0;p<count;p++)if(!background[p])mask[p]=1;
+ return mask;
+}
+function portraitPrepare(data,w,h,removeBackground){
+ if(portraitPreparedCache?.data===data&&portraitPreparedCache.removeBackground===removeBackground&&portraitPreparedCache.w===w&&portraitPreparedCache.h===h)return portraitPreparedCache;
+ const range=portraitPrepare._r||(portraitPrepare._r=Float32Array.from({length:256},(_,i)=>Math.exp(-i*i/(2*24*24))));
+ let kDx=portraitPrepare._dx,kDy=portraitPrepare._dy,kSp=portraitPrepare._sp;
+ if(!kDx){kDx=portraitPrepare._dx=new Int8Array(25);kDy=portraitPrepare._dy=new Int8Array(25);kSp=portraitPrepare._sp=new Float32Array(25);let n=0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){kDx[n]=dx;kDy[n]=dy;kSp[n]=Math.exp(-(dx*dx+dy*dy)/(2*1.2*1.2));n++}}
+ const count=w*h,mask=portraitBackgroundMask(data,w,h,removeBackground),lum=new Uint8Array(count),hist=new Uint32Array(256);
+ for(let p=0;p<count;p++){const i=p*4;lum[p]=(data[i]*77+data[i+1]*151+data[i+2]*28)>>8}
  const smooth=new Uint8Array(count);let used=0;
- for(let y=0;y<h;y++)for(let x=0;x<w;x++){const p=y*w+x;if(background[p])continue;let total=0,weight=0;const lp=lum[p];
-  for(let k=0;k<25;k++){const xx=x+kDx[k],yy=y+kDy[k];if(xx<0||xx>=w||yy<0||yy>=h)continue;const q=yy*w+xx;if(background[q])continue;const wt=kSp[k]*range[Math.abs(lum[q]-lp)];total+=lum[q]*wt;weight+=wt}
-  smooth[p]=Math.round(total/weight);hist[smooth[p]]++;mask[p]=1;used++;
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){const p=y*w+x;if(!mask[p])continue;let total=0,weight=0;const lp=lum[p];
+  for(let k=0;k<25;k++){const xx=x+kDx[k],yy=y+kDy[k];if(xx<0||xx>=w||yy<0||yy>=h)continue;const q=yy*w+xx;if(!mask[q])continue;const wt=kSp[k]*range[Math.abs(lum[q]-lp)];total+=lum[q]*wt;weight+=wt}
+  smooth[p]=Math.round(total/weight);hist[smooth[p]]++;used++;
  }
  const percentile=part=>{let n=0;for(let v=0;v<256;v++){n+=hist[v];if(n>=Math.max(1,used*part))return v}return 255};
  let low=percentile(.02),high=percentile(.98);if(high-low<40){low=0;high=255}
@@ -395,41 +401,14 @@ function portraitPrepare(data,w,h,removeBackground){
  portraitPreparedCache={data,w,h,removeBackground,mask,gray:portraitLocalContrast(smooth,mask,w,h)};return portraitPreparedCache;
 }
 let portraitTexture=3;
-function portraitMedianPalette(colors,count){
- const groups=[Array.from({length:count},(_,i)=>i)];
- while(groups.length<15){
-  let pick=-1,range=-1,channel=0;
-  for(let g=0;g<groups.length;g++){
-   const group=groups[g];if(group.length<2)continue;
-   const low=[255,255,255],high=[0,0,0];
-   for(const i of group)for(let c=0;c<3;c++){const value=colors[i*3+c];if(value<low[c])low[c]=value;if(value>high[c])high[c]=value}
-   for(let c=0;c<3;c++)if(high[c]-low[c]>range){range=high[c]-low[c];pick=g;channel=c}
-  }
-  if(pick<0)break;
-  const group=groups[pick];group.sort((a,b)=>colors[a*3+channel]-colors[b*3+channel]);
-  const mid=group.length>>1;groups.splice(pick,1,group.slice(0,mid),group.slice(mid));
+function portraitOriginalPixels(data,w,h,removeBackground,brightness,retention){
+ const mask=portraitBackgroundMask(data,w,h,removeBackground),count=w*h,rgb565=new Uint16Array(count),keep=retention/100;
+ for(let p=0;p<count;p++)if(mask[p]){
+  const i=p*4,r=data[i],g=data[i+1],b=data[i+2],y=(r*77+g*151+b*28)>>8,v=Math.max(0,Math.min(255,y+brightness));
+  const rr=Math.max(0,Math.min(255,Math.round(v+(r-y)*keep))),gg=Math.max(0,Math.min(255,Math.round(v+(g-y)*keep))),bb=Math.max(0,Math.min(255,Math.round(v+(b-y)*keep)));
+  rgb565[p]=((rr&0xf8)<<8)|((gg&0xfc)<<3)|(bb>>3);
  }
- const palette=new Uint32Array(16);
- groups.forEach((group,i)=>{let r=0,g=0,b=0;for(const n of group){r+=colors[n*3];g+=colors[n*3+1];b+=colors[n*3+2]}const size=group.length||1;palette[i+1]=(Math.round(r/size)<<16)|(Math.round(g/size)<<8)|Math.round(b/size)});
- return palette;
-}
-function portraitColorPixels(data,tone,mask,w,h,retention){
- let used=0;for(let p=0;p<mask.length;p++)if(mask[p])used++;
- if(!used)return {indices:new Uint8Array(mask.length),palette:new Uint32Array(16)};
- const colors=new Uint8Array(used*3),positions=new Uint32Array(used),keep=retention/100;let n=0;
- for(let p=0;p<mask.length;p++)if(mask[p]){
-  const i=p*4,r=data[i],g=data[i+1],b=data[i+2],y=(r*77+g*151+b*28)>>8,v=tone[p];
-  positions[n]=p;colors[n*3]=Math.max(0,Math.min(255,Math.round(v+(r-y)*keep)));colors[n*3+1]=Math.max(0,Math.min(255,Math.round(v+(g-y)*keep)));colors[n*3+2]=Math.max(0,Math.min(255,Math.round(v+(b-y)*keep)));n++;
- }
- const palette=portraitMedianPalette(colors,used),indices=new Uint8Array(mask.length);
- const pr=new Uint8Array(16),pg=new Uint8Array(16),pb=new Uint8Array(16);
- for(let i=1;i<16;i++){const c=palette[i];pr[i]=c>>16;pg[i]=(c>>8)&255;pb[i]=c&255}
- for(let n=0;n<used;n++){
-  const r=colors[n*3],g=colors[n*3+1],b=colors[n*3+2];let best=1,bestDistance=Infinity;
-  for(let i=1;i<16;i++){const dr=r-pr[i],dg=g-pg[i],db=b-pb[i],distance=dr*dr+dg*dg+db*db;if(distance<bestDistance){best=i;bestDistance=distance}}
-  indices[positions[n]]=best;
- }
- return {indices,palette};
+ return {rgb565,mask};
 }
 function portraitThemePixels(tone,mask,w,h,style,texture=portraitTexture){
  const entry=portraitStyles.find(s=>s.id===style),colors=entry?.palette?.length===4?entry.palette:portraitPalette,palette=new Uint32Array(16),indices=new Uint8Array(tone.length),bayer=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
@@ -444,19 +423,33 @@ function portraitThemePixels(tone,mask,w,h,style,texture=portraitTexture){
 function portraitPixelsForDevice(data,w,h,removeBackground,brightness,retention,style,texture=portraitTexture){
  const {gray,mask}=portraitPrepare(data,w,h,removeBackground),tone=new Uint8Array(w*h);
  for(let p=0;p<tone.length;p++)if(mask[p])tone[p]=Math.max(0,Math.min(255,gray[p]+brightness));
- return style>0?portraitThemePixels(tone,mask,w,h,style,texture):portraitColorPixels(data,tone,mask,w,h,retention);
+ return portraitThemePixels(tone,mask,w,h,style,texture);
 }
 function portraitPacked(){
- const retention=Math.max(0,Math.min(100,Math.round(Number($('portraitColor').value)||0))),count=PORTRAIT.w*PORTRAIT.h,{indices,palette}=portraitPixelsForDevice(portraitPixels(),PORTRAIT.w,PORTRAIT.h,$('portraitBackground').checked,Number($('portraitBrightness').value)||0,retention,portraitStyle,portraitTexture),packed=new Uint8Array(40+count/2);
+ const retention=Math.max(0,Math.min(100,Math.round(Number($('portraitColor').value)||0))),count=PORTRAIT.w*PORTRAIT.h,removeBackground=$('portraitBackground').checked,brightness=Number($('portraitBrightness').value)||0;
+ if(portraitStyle===0){
+  const {rgb565,mask}=portraitOriginalPixels(portraitPixels(),PORTRAIT.w,PORTRAIT.h,removeBackground,brightness,retention),baseOff=8+count*2,packed=new Uint8Array(baseOff+(count>>3));
+  packed.set([80,84,51,55,0,retention,0,0]);
+  for(let p=0;p<count;p++){const v=rgb565[p];packed[8+p*2]=v&255;packed[9+p*2]=v>>8;if(mask[p])packed[baseOff+(p>>3)]|=128>>(p&7)}
+  return packed;
+ }
+ const {indices,palette}=portraitPixelsForDevice(portraitPixels(),PORTRAIT.w,PORTRAIT.h,removeBackground,brightness,retention,portraitStyle,portraitTexture),packed=new Uint8Array(40+count/2);
  packed.set([80,84,51,54,portraitStyle,retention,0,0]);
  for(let i=1;i<16;i++){const c=palette[i],v=((((c>>16)&0xf8)<<8)|(((c>>8)&0xfc)<<3)|((c&0xff)>>3));packed[8+(i-1)*2]=v&255;packed[9+(i-1)*2]=v>>8}
  for(let p=0;p<count;p++)packed[40+(p>>1)]|=indices[p]<<(p&1?0:4);
  return packed;
 }
 function portraitColor(packed,p){
- const index=(packed[40+(p>>1)]>>(p&1?0:4))&15;
- if(!index)return portraitPalette[0];
- const c=packed[8+(index-1)*2]|(packed[9+(index-1)*2]<<8),r=(c>>11)&31,g=(c>>5)&63,b=c&31;
+ let o=0;
+ if(packed[3]===55){
+  if(!(packed[8+PORTRAIT.w*PORTRAIT.h*2+(p>>3)]&(128>>(p&7))))return portraitPalette[0];
+  o=8+p*2;
+ }else{
+  const index=(packed[40+(p>>1)]>>(p&1?0:4))&15;
+  if(!index)return portraitPalette[0];
+  o=8+(index-1)*2;
+ }
+ const c=packed[o]|(packed[o+1]<<8),r=(c>>11)&31,g=(c>>5)&63,b=c&31;
  return (Math.round(r*255/31)<<16)|(Math.round(g*255/63)<<8)|Math.round(b*255/31);
 }
 function previewPortrait(){if(typeof clearPreviewTimer==='function')clearPreviewTimer();$('binc')?.classList?.toggle('is-pending',false);if(!portrait)return;const packed=portraitPacked(),g=$('binc').getContext('2d'),o=g.createImageData(PORTRAIT.w,PORTRAIT.h);for(let p=0;p<PORTRAIT.w*PORTRAIT.h;p++){const color=portraitColor(packed,p),i=p*4;o.data[i]=color>>16;o.data[i+1]=(color>>8)&255;o.data[i+2]=color&255;o.data[i+3]=255}g.putImageData(o,0,0)}

@@ -105,7 +105,35 @@ static void portraits(void) {
     home_portrait_init_color_header(tones,3,50);
     assert(home_profile_write_avatar_chunk(tones,sizeof(tones),true,true,sizeof(tones))==ESP_ERR_INVALID_ARG);
     assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_OK&&readback[4]==UI_THEME_COUNT&&readback[5]==100);
-    puts("Portrait storage: legacy formats, PT36 palette/indices, masks, malformed headers, abort, failed commit and reboot: PASS");
+
+    uint8_t rgb565[HOME_AVATAR_RGB565_BYTES], rgb565_readback[HOME_AVATAR_RGB565_BYTES], rgb565_pixels[HOME_PORTRAIT_RGB565_BYTES];
+    for(size_t i=0;i<sizeof(rgb565);i++)rgb565[i]=(uint8_t)((i*13+5)&0xff);
+    home_portrait_init_rgb565_header(rgb565,100);
+    memset(rgb565+HOME_AVATAR_RGB565_MASK_OFFSET,0xff,HOME_PORTRAIT_MASK_BYTES);
+    rgb565[HOME_AVATAR_RGB565_MASK_OFFSET]=0x7f; /* pixel 0 masked out, pixels 1..7 visible */
+    assert(home_portrait_upload_size(HOME_AVATAR_RGB565_BYTES));
+    assert(home_profile_write_avatar_chunk(rgb565,sizeof(rgb565),true,true,sizeof(rgb565))==ESP_OK);
+    assert(home_profile_avatar_is_rgb565());
+    assert(home_profile_read_avatar(readback,sizeof(readback))==ESP_ERR_INVALID_SIZE);
+    assert(home_profile_read_avatar(rgb565_readback,sizeof(rgb565_readback))==ESP_OK&&!memcmp(rgb565,rgb565_readback,sizeof(rgb565)));
+    assert(home_profile_read_avatar_rgb565(rgb565_pixels,sizeof(rgb565_pixels),0x16171a)==ESP_OK);
+    /* 0x16171a -> RGB565 (2<<11)|(5<<5)|3 = 0x10a3 (lo=0xa3, hi=0x10) */
+    assert(rgb565_pixels[0]==0xa3&&rgb565_pixels[1]==0x10);
+    assert(rgb565_pixels[2]==rgb565[HOME_PORTRAIT_HEADER_BYTES+2]&&rgb565_pixels[3]==rgb565[HOME_PORTRAIT_HEADER_BYTES+3]);
+    assert(home_profile_read_avatar_rgb565(rgb565_pixels,sizeof(rgb565_pixels)-1,0)==ESP_ERR_INVALID_ARG);
+    home_portrait_init_rgb565_header(rgb565,100);rgb565[4]=1;
+    assert(home_profile_write_avatar_chunk(rgb565,sizeof(rgb565),true,true,sizeof(rgb565))==ESP_ERR_INVALID_ARG);
+    home_portrait_init_rgb565_header(rgb565,101);
+    assert(home_profile_write_avatar_chunk(rgb565,sizeof(rgb565),true,true,sizeof(rgb565))==ESP_ERR_INVALID_ARG);
+    home_portrait_init_rgb565_header(rgb565,50);rgb565[6]=1;
+    assert(home_profile_write_avatar_chunk(rgb565,sizeof(rgb565),true,true,sizeof(rgb565))==ESP_ERR_INVALID_ARG);
+    home_portrait_init_color_header(rgb565,0,50);
+    assert(home_profile_write_avatar_chunk(rgb565,sizeof(rgb565),true,true,sizeof(rgb565))==ESP_ERR_INVALID_ARG);
+    home_portrait_init_rgb565_header(color,50);
+    assert(home_profile_write_avatar_chunk(color,sizeof(color),true,true,sizeof(color))==ESP_ERR_INVALID_ARG);
+    home_profile_init();
+    assert(home_profile_avatar_is_rgb565()&&home_profile_read_avatar(rgb565_readback,sizeof(rgb565_readback))==ESP_OK&&rgb565_readback[3]=='7'&&rgb565_readback[5]==100);
+    puts("Portrait storage: legacy formats, PT36 palette/indices, PT37 RGB565/mask, masks, malformed headers, abort, failed commit and reboot: PASS");
 }
 int main(int argc,char **argv) {
     assert(argc==2);assert(mkdir(SPIFFS_BASE,0700)==0);

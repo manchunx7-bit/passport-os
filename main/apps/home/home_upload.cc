@@ -248,14 +248,16 @@ static esp_err_t handler_muse_post(httpd_req_t *req) {
 
 static esp_err_t handler_avatar_get(httpd_req_t *req) {
     if (!token_ok(req)) return send_json(req, 401, "{\"error\":\"unauthorized\"}");
-    auto *data = static_cast<uint8_t *>(std::calloc(1, HOME_AVATAR_MAX_BYTES));
+    const size_t cap = home_profile_avatar_is_rgb565() ? HOME_AVATAR_RGB565_BYTES : HOME_AVATAR_MAX_BYTES;
+    auto *data = static_cast<uint8_t *>(std::calloc(1, cap));
     if (!data) return send_json(req, 400, "{\"error\":\"oom\"}");
-    const esp_err_t loaded = home_profile_read_avatar(data, HOME_AVATAR_MAX_BYTES);
+    const esp_err_t loaded = home_profile_read_avatar(data, cap);
     if (loaded != ESP_OK) {
         std::free(data);
         return send_json(req, 400, "{\"error\":\"avatar\"}");
     }
-    const size_t payload_bytes = home_portrait_is_color(data) ? HOME_AVATAR_COLOR_BYTES : HOME_AVATAR_BYTES;
+    const size_t payload_bytes = home_portrait_is_rgb565(data) ? HOME_AVATAR_RGB565_BYTES :
+        home_portrait_is_color(data) ? HOME_AVATAR_COLOR_BYTES : HOME_AVATAR_BYTES;
     httpd_resp_set_type(req, "application/octet-stream");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store, max-age=0");
     const esp_err_t sent = httpd_resp_send(req, reinterpret_cast<const char *>(data), payload_bytes);

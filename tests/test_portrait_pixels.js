@@ -40,23 +40,37 @@ function paletteColors(packed){
  return out;
 }
 const rgb=value=>[(value>>16)&255,(value>>8)&255,value&255];
+const pixelRgb=(packed,p)=>rgb(context.portraitColor(packed,p));
+const opaqueColors=packed=>{
+ const seen=new Set();
+ for(let p=1;p<96*138;p++)seen.add(context.portraitColor(packed,p));
+ return [...seen].map(rgb);
+};
 context.setPortraitStyle(0);
 elements.portraitColor.value='50';
 const color=context.portraitPacked();
-assert.equal(color.length,6664);
-assert.deepEqual(Array.from(color.slice(0,8)),[80,84,51,54,0,50,0,0]);
+assert.equal(color.length,28160);
+assert.deepEqual(Array.from(color.slice(0,8)),[80,84,51,55,0,50,0,0]);
 assert.equal(context.portraitColor(color,0),0,'transparent pixel uses the homepage background');
-assert.equal((color[40]>>4)&15,0,'first transparent pixel keeps index zero');
-const midPalette=paletteColors(color);
-assert.ok(midPalette.some(c=>c[0]!==c[1]||c[1]!==c[2]),'default style keeps image colors');
+assert.equal(color[8+96*138*2]&128,0,'first transparent pixel clears mask bit');
+const midColors=opaqueColors(color);
+assert.ok(midColors.some(c=>c[0]!==c[1]||c[1]!==c[2]),'original style keeps image colors');
 elements.portraitColor.value='0';context.setPortraitStyle(0);
-const grayPalette=paletteColors(context.portraitPacked());
-assert.ok(grayPalette.every(([r,g,b])=>Math.max(r,g,b)-Math.min(r,g,b)<=8),'zero retention removes chroma');
+const grayColors=opaqueColors(context.portraitPacked());
+assert.ok(grayColors.every(([r,g,b])=>Math.max(r,g,b)-Math.min(r,g,b)<=8),'zero retention removes chroma');
 elements.portraitColor.value='100';context.setPortraitStyle(0);
-const fullPalette=paletteColors(context.portraitPacked());
-assert.ok(fullPalette.some(([r,g,b])=>Math.max(r,g,b)-Math.min(r,g,b)>16),'full retention restores chroma');
+const fullPacked=context.portraitPacked();
+const fullColors=opaqueColors(fullPacked);
+assert.ok(fullColors.length>100,'original style keeps >100 true colors without 15-color banding');
+for(const p of [1,2,100,1000,5000]){
+ const [r,g,b]=pixelRgb(fullPacked,p);
+ assert.ok(Math.abs(r-context.fixture[p*4])<=8&&Math.abs(g-context.fixture[p*4+1])<=4&&Math.abs(b-context.fixture[p*4+2])<=8,'original style matches source pixels within RGB565 rounding');
+}
 const spread=p=>p.reduce((m,c)=>Math.max(m,Math.max(...c)-Math.min(...c)),0);
-assert.ok(spread(fullPalette)>spread(midPalette),'higher retention widens the palette');
+assert.ok(spread(fullColors)>spread(midColors),'higher retention widens chroma');
+const [origLow,origHigh]=lowHigh(0);
+const avgLuma=p=>{let s=0;for(let i=1;i<96*138;i++){const [r,g,b]=pixelRgb(p,i);s+=r+g+b}return s/(96*138-1)};
+assert.ok(avgLuma(origHigh)>avgLuma(origLow),'brightness raises original luminance');
 elements.portraitColor.value='50';
 const stylePacks=[];
 for(let style=1;style<=5;style++){

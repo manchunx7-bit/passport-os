@@ -82,7 +82,7 @@ const posts=()=>requests.filter(r=>r.options.method==='POST');
  get('shareFile').files=[{size:1000}];await get('shareFile').onchange();
  failShare=true;await get('save').onclick();assert.equal(posts().filter(r=>r.url.startsWith('/api/finish')).length,0,'failed image must not close hotspot');assert.equal(get('save').disabled,false);
  req=posts().find(r=>r.url.startsWith('/api/profile'));let profile=JSON.parse(req.options.body);assert.equal(profile.name,'新名字');assert.equal(profile.address,'原地址','address field removed; saved value is preserved');assert.equal(profile.city,'自定义城市');assert.equal(profile.lat,'22.3','preserve custom weather coordinates');
- req=posts().find(r=>r.url.startsWith('/api/avatar'));assert.equal(req.options.body.byteLength,6664);assert.equal(req.options.body[4],0);assert.equal(req.options.body[3],54);
+ req=posts().find(r=>r.url.startsWith('/api/avatar'));assert.equal(req.options.body.byteLength,28160);assert.equal(req.options.body[4],0);assert.equal(req.options.body[3],55);
  // Failed avatar uploads retain the page and pending image for a later retry.
  for(const [code,message] of [['avatar_size',/长度不匹配/],['avatar_recv',/传输中断/],['avatar_store',/原头像已保留/]]){
   avatarError=code;const finishesBefore=posts().filter(r=>r.url.startsWith('/api/finish')).length;

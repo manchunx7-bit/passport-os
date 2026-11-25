@@ -36,7 +36,7 @@ constexpr int HTTPD_SOCK_ERR_TIMEOUT=-3;
 #define ESP_LOGW(...) ((void)0)
 #define ESP_LOGI(...) ((void)0)
 struct httpd_req_t {int content_len;};
-static bool authorized=true, fail_store=false, mock_color_avatar=false;
+static bool authorized=true, fail_store=false, mock_color_avatar=false, mock_rgb565_avatar=false;
 static int status, aborts, reads;
 static int64_t now;
 static size_t consumed, written, get_sent_len;
@@ -50,7 +50,9 @@ static int send_json(httpd_req_t*,int code,const char *text){status=code;respons
 static void httpd_resp_set_type(httpd_req_t*,const char*){}
 static void httpd_resp_set_hdr(httpd_req_t*,const char*,const char*){}
 static esp_err_t httpd_resp_send(httpd_req_t*,const char*,size_t len){get_sent_len=len;return ESP_OK;}
+static bool home_profile_avatar_is_rgb565(){return mock_rgb565_avatar;}
 static esp_err_t home_profile_read_avatar(uint8_t* dst,size_t cap){
+ if(mock_rgb565_avatar){assert(cap>=HOME_AVATAR_RGB565_BYTES);home_portrait_init_rgb565_header(dst,100);return ESP_OK;}
  assert(cap>=HOME_AVATAR_MAX_BYTES);
  if(mock_color_avatar) home_portrait_init_color_header(dst,0,50);
  else home_portrait_init_header(dst,3);
@@ -78,7 +80,7 @@ static void reset(std::vector<int> input={}){
  response.clear();committed=false;fail_store=false;authorized=true;
 }
 int main(){
- for(int size:{HOME_AVATAR_MAX_BYTES,HOME_AVATAR_BYTES,HOME_AVATAR_V2_BYTES,HOME_AVATAR_LEGACY_BYTES}){
+ for(int size:{HOME_AVATAR_RGB565_BYTES,HOME_AVATAR_MAX_BYTES,HOME_AVATAR_BYTES,HOME_AVATAR_V2_BYTES,HOME_AVATAR_LEGACY_BYTES}){
   reset({1,7,128,511});httpd_req_t req{size};handler_avatar_post(&req);
   assert(status==200&&committed&&consumed==static_cast<size_t>(size));
  }
@@ -94,8 +96,10 @@ int main(){
  reset();req.content_len=5000;handler_avatar_post(&req);assert(status==400&&reads==0);
  reset();authorized=false;req.content_len=HOME_AVATAR_BYTES;handler_avatar_post(&req);assert(status==401&&reads==0);
 #if TEST_AVATAR_GET
- reset();mock_color_avatar=false;get_sent_len=0;handler_avatar_get(&req);assert(get_sent_len==HOME_AVATAR_BYTES);
- reset();mock_color_avatar=true;get_sent_len=0;handler_avatar_get(&req);assert(get_sent_len==HOME_AVATAR_COLOR_BYTES);
+ reset();mock_rgb565_avatar=false;mock_color_avatar=false;get_sent_len=0;handler_avatar_get(&req);assert(get_sent_len==HOME_AVATAR_BYTES);
+ reset();mock_rgb565_avatar=false;mock_color_avatar=true;get_sent_len=0;handler_avatar_get(&req);assert(get_sent_len==HOME_AVATAR_COLOR_BYTES);
+ reset();mock_rgb565_avatar=true;get_sent_len=0;handler_avatar_get(&req);assert(get_sent_len==HOME_AVATAR_RGB565_BYTES);
+ mock_rgb565_avatar=false;
 #endif
  std::cout<<"Avatar HTTP: legacy/current sizes, bad size/auth, disconnect, deadline and storage failure: PASS\n";
 }

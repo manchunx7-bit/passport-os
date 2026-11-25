@@ -63,6 +63,8 @@ bool home_profile_has_avatar(void);
 // 把 SPIFFS 里的头像读进 dst(需 HOME_AVATAR_MAX_BYTES 字节)。调用方不得持有
 // LVGL 锁(文件读取可达几十毫秒)。首次调用会挂载 storage 分区。
 esp_err_t home_profile_read_avatar(uint8_t *dst, size_t cap);
+bool home_profile_avatar_is_rgb565(void);
+esp_err_t home_profile_read_avatar_rgb565(uint8_t *dst, size_t cap, uint32_t bg_rgb888);
 
 // 流式写头像:参数由 /api/avatar 处理器按收包顺序给出。数据先写 tmp 文件,
 // 兼容旧 1bpp / 2bpp 上传。写入非活动文件，完整落盘并校验后提交 NVS 指针。

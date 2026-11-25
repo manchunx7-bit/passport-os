@@ -150,9 +150,42 @@ WeatherSchedule s_weather_schedule;
 // Packed PT36 palette indices, or legacy PT35 tones; Home owns this buffer only
 // while its screen/worker are alive.
 uint8_t *s_portrait_packed = nullptr;
+uint8_t *s_portrait_pixels = nullptr;
+lv_image_dsc_t s_portrait_dsc;
+bool s_portrait_rgb565 = false;
 
 esp_err_t read_portrait(bool present) {
     if (!present) return ESP_FAIL;
+    if (home_profile_avatar_is_rgb565()) {
+        s_portrait_rgb565 = true;
+        if (s_portrait_packed) {
+            free(s_portrait_packed);
+            s_portrait_packed = nullptr;
+        }
+        if (s_portrait_pixels && s_portrait_dsc.data_size != HOME_PORTRAIT_RGB565_BYTES) {
+            free(s_portrait_pixels);
+            s_portrait_pixels = nullptr;
+            s_portrait_dsc.data = nullptr;
+            s_portrait_dsc.data_size = 0;
+        }
+        if (!s_portrait_pixels) {
+            s_portrait_pixels = static_cast<uint8_t *>(malloc(HOME_PORTRAIT_RGB565_BYTES));
+            if (!s_portrait_pixels) return ESP_ERR_NO_MEM;
+        }
+        const esp_err_t err = home_profile_read_avatar_rgb565(
+            s_portrait_pixels, HOME_PORTRAIT_RGB565_BYTES, kBg);
+        if (err != ESP_OK) {
+            free(s_portrait_pixels);
+            s_portrait_pixels = nullptr;
+            s_portrait_dsc.data = nullptr;
+            s_portrait_dsc.data_size = 0;
+            return err;
+        }
+        s_portrait_dsc.data = s_portrait_pixels;
+        s_portrait_dsc.data_size = HOME_PORTRAIT_RGB565_BYTES;
+        return ESP_OK;
+    }
+    s_portrait_rgb565 = false;
     if (!s_portrait_packed)
         s_portrait_packed = static_cast<uint8_t *>(malloc(HOME_AVATAR_MAX_BYTES));
     if (!s_portrait_packed) return ESP_ERR_NO_MEM;
@@ -163,8 +196,6 @@ esp_err_t read_portrait(bool present) {
 // 会直接从堆里扣掉,而小智等应用恰恰在这块内存上跑 Opus 编码器 —— 之前
 // largest 只剩 22KB,编码器(需约 25KB 连续块)必然 open 失败。首页与其它
 // 应用互斥运行,切走时归还,谁在用谁付钱。
-uint8_t *s_portrait_pixels = nullptr;
-lv_image_dsc_t s_portrait_dsc;
 
 std::atomic<bool> s_home_active{false};
 // 界面存活开关:home_task 每轮持锁刷新前检查,stop() 删屏前置 false。
@@ -252,7 +283,18 @@ void expand_portrait(void) {
 
 // 无头像时显示占位文字(磷光风格不用彩色吉祥物)。
 void apply_avatar(bool have_image) {
-    have_image = have_image && s_portrait_packed;
+    have_image = have_image && (s_portrait_rgb565 ? s_portrait_pixels != nullptr : s_portrait_packed != nullptr);
+    if (have_image && s_portrait_rgb565) {
+        lv_image_cache_drop(&s_portrait_dsc);
+        s_portrait_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+        s_portrait_dsc.header.stride = HOME_PORTRAIT_W * 2;
+        s_portrait_dsc.data_size = HOME_PORTRAIT_RGB565_BYTES;
+        s_portrait_dsc.data = s_portrait_pixels;
+        lv_image_set_src(s_avatar_img, &s_portrait_dsc);
+        lv_obj_clear_flag(s_avatar_img, LV_OBJ_FLAG_HIDDEN);
+        if (s_portrait_ph) lv_obj_add_flag(s_portrait_ph, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
     const bool legacy = have_image && !home_portrait_is_color(s_portrait_packed) &&
         s_portrait_packed[4] == 0;
     const size_t bytes = legacy ? HOME_PORTRAIT_PIXELS : HOME_PORTRAIT_I4_BYTES;
@@ -1112,7 +1154,16 @@ void home_task(void *arg) {
                 s_force_weather.store(true);
             const bool has = home_profile_has_avatar();
             esp_err_t err = ESP_FAIL;
-            if (has) err = read_portrait(true);
+            if (has) {
+                if (s_portrait_pixels != nullptr && bsp_lvgl_lock(1000)) {
+                    if (s_ui_alive.load() && s_avatar_img) {
+                        lv_image_set_src(s_avatar_img, nullptr);
+                        lv_image_cache_drop(&s_portrait_dsc);
+                    }
+                    bsp_lvgl_unlock();
+                }
+                err = read_portrait(true);
+            }
             if (bsp_lvgl_lock(1000)) {
                 if (s_ui_alive.load()) {
                     apply_profile(&prof);
@@ -1336,6 +1387,8 @@ void home_stop() {
 
     free(s_portrait_packed);
     s_portrait_packed = nullptr;
+    s_portrait_rgb565 = false;
+    s_portrait_dsc.data_size = 0;
     ESP_LOGI(kTag, "Home app stopped. Free heap: %u KB",
              (unsigned)(esp_get_free_heap_size() / 1024));
 }
